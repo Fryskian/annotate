@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "Annotate.js Element Review",
+  "version": "1.1.0",
+  "description": "Open annotate.js on the active page and attach local-first review decisions to DOM elements.",
+  "permissions": ["activeTab", "scripting"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Open annotate.js"
+  }
+}

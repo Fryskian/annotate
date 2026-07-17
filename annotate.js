@@ -77,7 +77,7 @@
   ];
 
   var state = {
-    tool: "cursor", // cursor | highlight | rect | circle | pin | pen
+    tool: "cursor", // cursor | inspect | highlight | rect | circle | pin | pen
     color: store.get("an-color") || COLORS[0].hex,
     author: store.get("an-author") || "",
     // note & share are set by the author via data-note / data-share-email on
@@ -189,6 +189,9 @@
       createdAt: now,
       updatedAt: now,
     };
+    if (draft.verdict) c.verdict = draft.verdict;
+    if (draft.element) c.element = draft.element;
+    if (draft.context) c.context = draft.context;
     d.comments.push(c); dbWrite(d);
     return c;
   }
@@ -307,7 +310,7 @@
   #__an_root, #__an_root *, #__an_compose, #__an_compose *,
   #__an_toasts, #__an_toasts *, #__an_namewrap, #__an_namewrap *,
   #__an_sharewrap, #__an_sharewrap *, #__an_launch, #__an_launch *,
-  #__an_plus, #__an_plus * { box-sizing: border-box; }
+  #__an_plus, #__an_plus *, #__an_elementwrap, #__an_elementwrap * { box-sizing: border-box; }
 
   .an-mark { border-radius: 2px; padding: .04em 0; cursor: pointer;
     transition: background .15s, box-shadow .15s; }
@@ -316,6 +319,53 @@
   #__an_overlay { position: absolute; top:0; left:0; pointer-events:none;
     z-index: 2147483000; overflow: visible; }
   #__an_overlay .an-hit { pointer-events: stroke; cursor: pointer; }
+
+  /* ---- element inspector ------------------------------------------------- */
+  #__an_inspect_capture { position:fixed; inset:0; z-index:2147483190;
+    cursor:crosshair; background:transparent; }
+  #__an_inspect_overlay { position:fixed; z-index:2147483191; pointer-events:none;
+    background:rgba(99,102,241,.14); outline:2px solid #6366f1;
+    outline-offset:-1px; }
+  #__an_inspect_label { position:fixed; z-index:2147483192; pointer-events:none;
+    max-width:min(460px,calc(100vw - 16px)); padding:5px 8px; border-radius:5px;
+    background:#17171f; color:#fff; font:600 11px/1.35 var(--an-font);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    box-shadow:var(--an-shadow-sm); }
+  #__an_inspect_crumbs { position:fixed; top:12px; left:50%;
+    transform:translateX(-50%); z-index:2147483500; display:flex; align-items:center;
+    max-width:calc(100vw - 24px); padding:6px; gap:3px; overflow-x:auto;
+    border:1px solid var(--an-border); border-radius:10px; background:var(--an-surface);
+    color:var(--an-fg); box-shadow:var(--an-shadow-md); font-family:var(--an-font); }
+  #__an_inspect_crumbs button { flex:none; border:0; border-radius:6px; padding:5px 7px;
+    background:transparent; color:inherit; font:600 11px var(--an-font); cursor:pointer; }
+  #__an_inspect_crumbs button:hover,
+  #__an_inspect_crumbs button:focus-visible { background:var(--an-surface-2); outline:none;
+    box-shadow:var(--an-ring); }
+  #__an_inspect_crumbs button.an-selected { background:var(--an-btn-bg); color:var(--an-btn-fg); }
+  #__an_inspect_crumbs span { flex:none; color:var(--an-muted); font-size:10px; }
+  #__an_elementwrap { position:fixed; inset:0; z-index:2147483400;
+    display:flex; align-items:center; justify-content:center; padding:52px 16px 16px;
+    background:rgba(10,10,16,.48); font-family:var(--an-font); }
+  #__an_elementbox { width:min(420px,100%); max-height:calc(100vh - 72px); overflow:auto;
+    padding:20px; border:1px solid var(--an-border); border-radius:16px;
+    background:var(--an-surface); color:var(--an-fg); box-shadow:var(--an-shadow-lg); }
+  #__an_elementbox h2 { margin:0 0 6px; font:700 17px/1.3 var(--an-font); }
+  #__an_elementbox .an-edesc { margin:0 0 14px; color:var(--an-muted);
+    font:500 12.5px/1.45 var(--an-font); }
+  #__an_element_summary { margin:0 0 14px; padding:9px 10px; border-radius:8px;
+    background:var(--an-surface-2); font:600 12px/1.4 var(--an-font);
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .an-verdicts { display:grid; grid-template-columns:repeat(3,1fr); gap:7px; margin-bottom:13px; }
+  .an-verdict { min-height:38px; border:2px solid transparent; border-radius:9px;
+    color:#fff; font:700 12px var(--an-font); cursor:pointer; }
+  .an-verdict[data-verdict="keep"] { background:#047857; }
+  .an-verdict[data-verdict="change"] { background:#b91c1c; }
+  .an-verdict[data-verdict="question"] { background:#f59e0b; color:#17171f; }
+  .an-verdict[aria-pressed="true"], .an-verdict:focus-visible { outline:2px solid var(--an-surface);
+    box-shadow:0 0 0 4px var(--an-fg); }
+  #__an_elementbox label { display:block; margin-bottom:6px; font:700 12px var(--an-font); }
+  #__an_elementbox .an-ta { width:100%; }
+  .an-eactions { display:flex; justify-content:flex-end; gap:7px; margin-top:14px; }
 
   .an-pin { position:absolute; width:26px; height:26px; margin:-13px 0 0 -13px;
     border-radius: 50% 50% 50% 2px; transform: rotate(45deg);
@@ -736,6 +786,7 @@
   // ==========================================================================
   var ICONS = {
     cursor: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l7.5 18 2.2-7.3L20 11.5z"/></svg>',
+    inspect: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/><circle cx="12" cy="12" r="3"/></svg>',
     highlight: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l-6 6v3h3l6-6"/><path d="M22 3l-7 7-4-4 7-7z" transform="translate(-2 2)"/><path d="M12.5 6.5l5 5"/></svg>',
     rect: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3.5" y="5.5" width="17" height="13" rx="2"/></svg>',
     circle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="12" rx="9" ry="7.5"/></svg>',
@@ -972,7 +1023,7 @@
         renderGeom(c);
       } else if (c.type === "pin" && c.geom) {
         renderPin(c);
-      } else if (c.type === "block" && c.geom) {
+      } else if ((c.type === "block" || c.type === "element") && c.geom) {
         renderBlock(c);
       }
     });
@@ -1204,7 +1255,7 @@
   }
   function commitDraft(draft) {
     var c = createComment(draft);
-    composer.classList.remove("an-show");
+    if (composer) composer.classList.remove("an-show");
     clearTemp();
     state.comments.push(c);
     state.activeId = c.id;
@@ -1344,6 +1395,257 @@
   }
   function clamp01(v) { return Math.max(0, Math.min(1, v)); }
 
+  // --------------------------------------------------------------------------
+  // ELEMENT INSPECTOR — fixed UI only, so inspecting never changes page layout.
+  // --------------------------------------------------------------------------
+  var inspectCapture, inspectOverlay, inspectLabel, inspectCrumbs, inspectTarget;
+  var elementWrap, elementSummaryEl, inspectReleaseFocus, inspectReturnFocus;
+  var inspectHierarchy = [], inspectIndex = -1;
+  function elementSummary(node) {
+    if (!node || node.nodeType !== 1) return "";
+    var out = node.nodeName.toLowerCase();
+    if (node.id) out += "#" + node.id;
+    if (node.classList && node.classList.length)
+      out += "." + Array.prototype.slice.call(node.classList, 0, 4).join(".");
+    return out;
+  }
+  function inspectAncestry(node) {
+    var path = [];
+    while (node && node.nodeType === 1 && node !== document.documentElement) {
+      if (node !== document.body && !isOurs(node)) path.unshift(node);
+      node = node.parentElement;
+    }
+    return path.slice(-8);
+  }
+  function uniqueSelector(selector, node) {
+    try {
+      var matches = document.querySelectorAll(selector);
+      return matches.length === 1 && matches[0] === node;
+    } catch (e) { return false; }
+  }
+  function stableClasses(node) {
+    return Array.prototype.slice.call(node.classList || []).filter(function (name) {
+      return name.indexOf("an-") !== 0 && name.length <= 64 &&
+        !/(^|[-_])(active|current|focus|hover|open|selected)([-_]|$)/i.test(name) &&
+        !/\d{5,}/.test(name);
+    }).slice(0, 4);
+  }
+  var SEMANTIC_SELECTOR_TAGS = /^(main|article|section|aside|header|footer|nav|form|figure|figcaption|h[1-6]|p|button|a|table|ul|ol|li)$/;
+  function stableSelector(node) {
+    if (!node || node.nodeType !== 1 || isOurs(node)) return null;
+    if (node.id) {
+      var idSelector = "#" + CSS.escape(node.id);
+      if (uniqueSelector(idSelector, node)) return idSelector;
+    }
+    var reviewId = node.getAttribute("data-review-id");
+    if (reviewId) {
+      var reviewSelector = "[data-review-id=" + CSS.escape(reviewId) + "]";
+      if (uniqueSelector(reviewSelector, node)) return reviewSelector;
+    }
+    var tag = node.nodeName.toLowerCase();
+    if (SEMANTIC_SELECTOR_TAGS.test(tag)) {
+      var classes = stableClasses(node);
+      var semantic = tag + classes.map(function (name) { return "." + CSS.escape(name); }).join("");
+      if (uniqueSelector(semantic, node)) return semantic;
+      if (uniqueSelector(tag, node)) return tag;
+    }
+    return null;
+  }
+  function nthSegment(node) {
+    var index = 1, sibling = node;
+    while ((sibling = sibling.previousElementSibling))
+      if (sibling.nodeName === node.nodeName) index++;
+    return node.nodeName.toLowerCase() + ":nth-of-type(" + index + ")";
+  }
+  function elementSelector(node) {
+    var stable = stableSelector(node);
+    if (stable) return stable;
+    var parts = [], current = node;
+    while (current && current !== document.body) {
+      parts.unshift(nthSegment(current));
+      var localPath = parts.join(" > ");
+      if (uniqueSelector(localPath, node)) return localPath;
+      current = current.parentElement;
+      var anchor = stableSelector(current);
+      if (anchor) {
+        var anchored = anchor + " > " + localPath;
+        if (uniqueSelector(anchored, node)) return anchored;
+      }
+    }
+    return "body > " + parts.join(" > ");
+  }
+  function elementMetadata(node) {
+    return {
+      tag: node.nodeName.toLowerCase(),
+      id: node.id || null,
+      classes: Array.prototype.slice.call(node.classList || []),
+      textExcerpt: String(node.innerText || node.textContent || "").replace(/\s+/g, " ").trim().slice(0, 160),
+      ancestry: inspectAncestry(node).map(elementSummary),
+    };
+  }
+  function elementContext(node) {
+    var r = node.getBoundingClientRect();
+    return {
+      url: location.href,
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+      rect: { x: r.left, y: r.top, width: r.width, height: r.height },
+    };
+  }
+  function pageElementAt(x, y) {
+    inspectCapture.style.display = "none";
+    var node = document.elementFromPoint(x, y);
+    inspectCapture.style.display = "";
+    return node && node.nodeType === 1 && !isOurs(node) ? node : null;
+  }
+  function showInspectTarget(node, keepHierarchy) {
+    if (!node || isOurs(node)) return;
+    inspectTarget = node;
+    if (!keepHierarchy) inspectHierarchy = inspectAncestry(node);
+    inspectIndex = inspectHierarchy.indexOf(node);
+    var r = node.getBoundingClientRect();
+    inspectOverlay.style.left = r.left + "px";
+    inspectOverlay.style.top = r.top + "px";
+    inspectOverlay.style.width = r.width + "px";
+    inspectOverlay.style.height = r.height + "px";
+    inspectOverlay.hidden = false;
+    inspectLabel.textContent = elementSummary(node) + "  " + Math.round(r.width) + " × " + Math.round(r.height);
+    inspectLabel.style.left = Math.max(8, Math.min(r.left, window.innerWidth - 468)) + "px";
+    inspectLabel.style.top = (r.top > 34 ? r.top - 30 : Math.min(window.innerHeight - 28, r.bottom + 4)) + "px";
+    inspectLabel.hidden = false;
+    if (elementSummaryEl) elementSummaryEl.textContent = inspectLabel.textContent;
+    inspectCrumbs.innerHTML = "";
+    inspectHierarchy.forEach(function (part, index) {
+      if (index) inspectCrumbs.appendChild(el("span", { text: "›" }));
+      var crumb = el("button", {
+        type: "button", class: index === inspectIndex ? "an-selected" : "", text: elementSummary(part),
+        "aria-label": "Select " + elementSummary(part),
+      });
+      crumb.addEventListener("click", function (e) {
+        e.stopPropagation();
+        showInspectTarget(part, true);
+        if (elementWrap) inspectCrumbs.querySelector(".an-selected").focus();
+        openElementDialog();
+      });
+      inspectCrumbs.appendChild(crumb);
+    });
+  }
+  function closeElementDialog() {
+    if (inspectReleaseFocus) inspectReleaseFocus();
+    inspectReleaseFocus = null;
+    if (elementWrap) elementWrap.remove();
+    elementWrap = elementSummaryEl = null;
+    if (inspectReturnFocus && inspectReturnFocus.isConnected) inspectReturnFocus.focus();
+    inspectReturnFocus = null;
+  }
+  function openElementDialog() {
+    if (!inspectTarget || elementWrap) return;
+    inspectReturnFocus = document.activeElement;
+    elementWrap = el("div", { id: "__an_elementwrap" });
+    var box = el("div", { id: "__an_elementbox", role: "dialog", "aria-modal": "true", "aria-labelledby": "__an_element_title" });
+    var title = el("h2", { id: "__an_element_title", text: "Classify selected element" });
+    elementSummaryEl = el("div", { id: "__an_element_summary", text: inspectLabel.textContent });
+    var verdicts = el("div", { class: "an-verdicts", role: "group", "aria-label": "Verdict" });
+    [["keep", "Keep"], ["change", "Change"], ["question", "Question"]].forEach(function (item, index) {
+      var verdict = el("button", { type: "button", class: "an-verdict", "data-verdict": item[0],
+        "aria-pressed": index === 0 ? "true" : "false", text: item[1] });
+      verdict.addEventListener("click", function () {
+        verdicts.querySelectorAll(".an-verdict").forEach(function (button) { button.setAttribute("aria-pressed", "false"); });
+        verdict.setAttribute("aria-pressed", "true");
+      });
+      verdicts.appendChild(verdict);
+    });
+    var commentLabel = el("label", { for: "__an_element_comment", text: "Comment" });
+    var comment = el("textarea", { id: "__an_element_comment", class: "an-ta", rows: "4", required: "", placeholder: "Explain this decision…" });
+    var cancel = el("button", { type: "button", class: "an-ghost", text: "Cancel" });
+    var save = el("button", { type: "button", class: "an-primary", text: "Save annotation" });
+    cancel.addEventListener("click", function () { setTool("cursor"); });
+    save.addEventListener("click", function () {
+      if (!comment.value.trim()) { comment.reportValidity(); return; }
+      var chosen = verdicts.querySelector('.an-verdict[aria-pressed="true"]');
+      var verdict = chosen.getAttribute("data-verdict");
+      var colors = { keep: "#10b981", change: "#ef4444", question: "#f59e0b" };
+      commitDraft({
+        type: "element",
+        verdict: verdict,
+        text: comment.value.trim(),
+        color: colors[verdict],
+        geom: { kind: "block", selector: elementSelector(inspectTarget) },
+        element: elementMetadata(inspectTarget),
+        context: elementContext(inspectTarget),
+      });
+    });
+    box.appendChild(title);
+    box.appendChild(el("p", { class: "an-edesc", text: "Choose a verdict and add the reviewer note." }));
+    box.appendChild(elementSummaryEl);
+    box.appendChild(verdicts);
+    box.appendChild(commentLabel);
+    box.appendChild(comment);
+    box.appendChild(el("div", { class: "an-eactions" }, [cancel, save]));
+    elementWrap.appendChild(inspectCrumbs);
+    elementWrap.appendChild(box);
+    document.body.appendChild(elementWrap);
+    inspectReleaseFocus = trapFocus(elementWrap);
+    comment.focus();
+  }
+  function onInspectKeydown(e) {
+    if (state.tool !== "inspect") return;
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      setTool("cursor");
+    } else if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+      e.preventDefault();
+      e.stopPropagation();
+      var next = inspectIndex + (e.key === "ArrowUp" ? -1 : 1);
+      if (inspectHierarchy[next]) showInspectTarget(inspectHierarchy[next], true);
+    }
+  }
+  function repositionInspectTarget() {
+    if (inspectTarget) showInspectTarget(inspectTarget, true);
+  }
+  function startInspector() {
+    if (inspectCapture) return;
+    closePanel();
+    inspectCapture = el("div", { id: "__an_inspect_capture", "aria-hidden": "true" });
+    inspectOverlay = el("div", { id: "__an_inspect_overlay", hidden: "" });
+    inspectLabel = el("div", { id: "__an_inspect_label", hidden: "" });
+    inspectCrumbs = el("nav", { id: "__an_inspect_crumbs", "aria-label": "Element ancestry" });
+    document.body.appendChild(inspectCapture);
+    document.body.appendChild(inspectOverlay);
+    document.body.appendChild(inspectLabel);
+    document.body.appendChild(inspectCrumbs);
+    document.addEventListener("keydown", onInspectKeydown, true);
+    window.addEventListener("scroll", repositionInspectTarget, { passive: true });
+    window.addEventListener("resize", repositionInspectTarget);
+    inspectCapture.addEventListener("pointermove", function (e) {
+      var node = pageElementAt(e.clientX, e.clientY);
+      if (node && node !== inspectTarget) showInspectTarget(node);
+    });
+    inspectCapture.addEventListener("pointerdown", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      var node = pageElementAt(e.clientX, e.clientY);
+      if (node) showInspectTarget(node);
+    }, true);
+    inspectCapture.addEventListener("click", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      openElementDialog();
+    }, true);
+  }
+  function stopInspector() {
+    document.removeEventListener("keydown", onInspectKeydown, true);
+    window.removeEventListener("scroll", repositionInspectTarget);
+    window.removeEventListener("resize", repositionInspectTarget);
+    closeElementDialog();
+    [inspectCapture, inspectOverlay, inspectLabel, inspectCrumbs].forEach(function (node) {
+      if (node) node.remove();
+    });
+    inspectCapture = inspectOverlay = inspectLabel = inspectCrumbs = inspectTarget = null;
+    inspectHierarchy = [];
+    inspectIndex = -1;
+  }
+
   document.addEventListener("pointerdown", onDown, true);
   document.addEventListener("pointermove", onMove, true);
   document.addEventListener("pointerup", onUp, true);
@@ -1369,7 +1671,7 @@
 
     bar = el("div", { id: "__an_bar", class: SIDE });
     var tools = [
-      ["cursor", "Browse", "V"], ["highlight", "Highlight text", "H"],
+      ["cursor", "Browse", "V"], ["inspect", "Inspect element", "I"], ["highlight", "Highlight text", "H"],
       ["rect", "Rectangle", "R"], ["circle", "Circle", "C"],
       ["pen", "Freehand", "D"], ["pin", "Pin", "P"],
     ];
@@ -1432,7 +1734,7 @@
     helpEl = el("div", { id: "__an_help", class: SIDE }, [
       el("h3", { text: "Keyboard shortcuts" }),
     ]);
-    [["V", "Browse"], ["H", "Highlight"], ["R", "Rectangle"], ["C", "Circle"],
+    [["V", "Browse"], ["I", "Inspect element"], ["H", "Highlight"], ["R", "Rectangle"], ["C", "Circle"],
      ["D", "Freehand"], ["P", "Pin"], ["A", "Comments panel"], ["O", "Show / hide tools"],
      ["Esc", "Cancel"], ["?", "This card"]].forEach(function (row) {
       helpEl.appendChild(el("div", { class: "an-krow" }, [
@@ -1487,7 +1789,7 @@
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === "o") { setEnabled(!state.enabled); return; }
       if (!state.enabled) return;
-      var map = { v: "cursor", h: "highlight", r: "rect", c: "circle", d: "pen", p: "pin" };
+      var map = { v: "cursor", i: "inspect", h: "highlight", r: "rect", c: "circle", d: "pen", p: "pin" };
       if (map[e.key]) { setTool(map[e.key]); }
       else if (e.key === "a") togglePanel();
       else if (e.key === "?") helpEl.classList.toggle("an-show");
@@ -1667,13 +1969,16 @@
   }
 
   function setTool(t) {
+    if (state.tool === "inspect" && t !== "inspect") stopInspector();
     state.tool = t;
     bar.querySelectorAll(".an-btn[data-tool]").forEach(function (b) {
       b.classList.toggle("an-on", b.getAttribute("data-tool") === t);
     });
+    if (t === "inspect") startInspector();
     var drawingTool = t === "rect" || t === "circle" || t === "pen" || t === "pin";
     document.body.classList.toggle("an-drawing", drawingTool);
-    var hints = { highlight: "Select any text to highlight & comment",
+    var hints = { inspect: "Hover an element, then click to classify it",
+      highlight: "Select any text to highlight & comment",
       rect: "Drag to draw a rectangle", circle: "Drag to draw a circle",
       pen: "Draw freehand — release to comment", pin: "Click anywhere to drop a pin" };
     if (hints[t]) showHint(hints[t]); else hideHint();
@@ -1735,7 +2040,7 @@
     if (sub) sub.textContent = String(state.comments.length);
   }
 
-  var TYPE_LABEL = { highlight: "Highlight", shape: "Shape", pin: "Pin", pen: "Sketch", note: "Note", block: "Section" };
+  var TYPE_LABEL = { highlight: "Highlight", shape: "Shape", pin: "Pin", pen: "Sketch", note: "Note", block: "Section", element: "Element" };
   function visibleComments() {
     return state.comments.filter(function (c) {
       if (state.filter === "open" && c.resolved) return false;

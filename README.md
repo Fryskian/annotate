@@ -36,6 +36,7 @@ That single line is the whole installation.
 
 | Tool | What it does |
 |------|--------------|
+| ⌖ **Inspect element** | Hover the DOM, choose the intended ancestor, and save a Keep, Change, or Question decision |
 | ✏️ **Highlight** | Select any text to highlight and comment on it |
 | ▭ **Rectangle** | Draw a box around any region |
 | ◯ **Circle** | Circle anything that needs attention |
@@ -46,6 +47,30 @@ That single line is the whole installation.
 Plus: threaded replies, resolve/reopen, search & filter, deep-links to a single
 comment (`#an=<id>`), an "off" mode that collapses to a small launcher, and a
 **Download / Import** round-trip for sharing.
+
+## Chrome / Edge extension
+
+This fork keeps the root `annotate.js` standalone build and adds an on-demand
+Manifest V3 extension. It remains local-only: no remote scripts, accounts,
+telemetry, backend, or host permissions.
+
+```bash
+node scripts/build-extension.mjs
+```
+
+Then open `chrome://extensions` or `edge://extensions`, enable **Developer
+mode**, choose **Load unpacked**, and select `dist/extension/`. Pin the
+extension and click its toolbar icon on a normal `http://` or `https://` page.
+For local `file://` mockups, enable **Allow access to file URLs** in the
+extension details first.
+
+Browser internal pages (`chrome://`, `edge://`), browser stores, and other
+restricted pages do not allow script injection. Annotate.js shows a red `!`
+badge and a useful toolbar title when injection is unavailable.
+
+The extension bundles the current root `annotate.js` during the build. The
+standalone script, local-storage behavior, portable JSON import/export, MIT
+license, and original reviewjs/annotate attribution remain intact.
 
 ---
 
