@@ -74,6 +74,71 @@ license, and original reviewjs/annotate attribution remain intact.
 
 ---
 
+## WordPress plugin
+
+The optional WordPress adapter loads the same local `annotate.js` only for
+signed-in users who can `edit_pages`. It adds **Annotate page** to the front-end
+admin bar, supports proposed text and Media Library images, stores submitted
+reviews as private **Design Reviews**, emails a summary, and provides a secure
+JSON download for Codex.
+
+```bash
+node scripts/build-wordpress.mjs
+```
+
+Copy `dist/wordpress/annotate-review/` to
+`wp-content/plugins/annotate-review/`, then activate **Annotate Review** in
+WordPress. Set the notification address under **Settings → General → Website
+review recipient**.
+
+Reviewers can then:
+
+1. Open a front-end page and choose **Annotate page** in the admin bar.
+2. Inspect an element and choose Keep, Change, or Question.
+3. For Change decisions, propose replacement text and optionally upload an
+   image with an accessible description.
+4. Choose **Submit review**, add an overall message, and submit.
+5. Download the portable JSON from **Design Reviews** in wp-admin.
+
+Annotations remain in the reviewer's local storage until submitted. Submission
+uses WordPress cookie authentication, a REST nonce, native capabilities,
+`wp_mail()`, the Media Library, and a private custom post type—no external
+service or custom database table. WordPress Media Library files are public by
+URL by default; do not upload confidential review assets without adding a
+protected-media solution. Image proposals upload immediately so they survive a
+refresh; abandoning a draft can therefore leave an unattached Media Library
+item that an administrator may remove during normal media cleanup.
+
+For the optional DDEV browser check, install the built plugin in a WordPress
+fixture and run:
+
+```bash
+WP_BASE_URL=https://annotate-wp-test.ddev.site npx playwright test tests/wordpress-ddev.spec.js --project=chromium
+```
+
+Proposed edits extend ordinary element comments without breaking older imports:
+
+```json
+{
+  "type": "element",
+  "verdict": "change",
+  "proposal": {
+    "text": { "before": "Old heading", "after": "Approved heading" },
+    "image": {
+      "action": "add",
+      "alt": "Support team working together",
+      "attachment": { "id": 42, "url": "https://example.com/uploads/team.jpg", "mime": "image/jpeg" }
+    }
+  }
+}
+```
+
+The browser previews proposals but never edits WordPress posts, blocks, themes,
+or templates directly. The exported JSON is the implementation request for
+Codex or a human developer.
+
+---
+
 ## Quick start
 
 ### 1. The fastest way (CDN)

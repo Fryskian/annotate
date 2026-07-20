@@ -55,6 +55,9 @@
     startOpen: truthy(scriptData.startOpen || globalConfig.startOpen),
     note: scriptData.note || globalConfig.note || "",
     share: String(scriptData.shareEmail || globalConfig.shareEmail || "").trim(),
+    contentEditing: truthy(globalConfig.contentEditing),
+    uploadAttachment: typeof globalConfig.uploadAttachment === "function" ? globalConfig.uploadAttachment : null,
+    submitReview: typeof globalConfig.submitReview === "function" ? globalConfig.submitReview : null,
   };
   var PAGE = (CFG.project ? CFG.project + ":" : "") + CFG.page;
 
@@ -192,6 +195,7 @@
     if (draft.verdict) c.verdict = draft.verdict;
     if (draft.element) c.element = draft.element;
     if (draft.context) c.context = draft.context;
+    if (draft.proposal) c.proposal = draft.proposal;
     d.comments.push(c); dbWrite(d);
     return c;
   }
@@ -264,10 +268,15 @@
   function isOurs(node) {
     while (node) {
       if (node.id && String(node.id).indexOf("__an") === 0) return true;
+      if (node.getAttribute && node.hasAttribute("data-annotate-ui")) return true;
       if (node.classList && node.classList.contains("an-mark")) return false;
       node = node.parentNode;
     }
     return false;
+  }
+  function canProposeText(node) {
+    return !!node && !isOurs(node) && node.children && node.children.length === 0 &&
+      /^(H[1-6]|P|LI|A|BUTTON|LABEL|FIGCAPTION|BLOCKQUOTE|TD|TH)$/.test(node.nodeName);
   }
 
   // ==========================================================================
@@ -315,6 +324,8 @@
   .an-mark { border-radius: 2px; padding: .04em 0; cursor: pointer;
     transition: background .15s, box-shadow .15s; }
   .an-mark.an-active { box-shadow: 0 0 0 2px rgba(0,0,0,.14); }
+  .an-proposal-image { display:block; max-width:100%; height:auto; margin:12px 0;
+    outline:2px dashed var(--an-btn-bg); outline-offset:3px; }
 
   #__an_overlay { position: absolute; top:0; left:0; pointer-events:none;
     z-index: 2147483000; overflow: visible; }
@@ -365,6 +376,9 @@
     box-shadow:0 0 0 4px var(--an-fg); }
   #__an_elementbox label { display:block; margin-bottom:6px; font:700 12px var(--an-font); }
   #__an_elementbox .an-ta { width:100%; }
+  #__an_elementbox .an-proposal-fields { margin:0 0 13px; padding:12px;
+    border:1px solid var(--an-border); border-radius:10px; background:var(--an-surface-2); }
+  #__an_elementbox .an-proposal-fields[hidden] { display:none; }
   .an-eactions { display:flex; justify-content:flex-end; gap:7px; margin-top:14px; }
 
   .an-pin { position:absolute; width:26px; height:26px; margin:-13px 0 0 -13px;
@@ -559,6 +573,9 @@
     font:600 12.5px var(--an-font); cursor:pointer; display:flex; align-items:center;
     justify-content:center; gap:7px; transition: background .15s, border-color .15s; }
   #__an_foot .an-fbtn:hover { background: var(--an-surface-2); border-color: var(--an-btn-bg); }
+  #__an_foot .an-fbtn.an-submit { background:var(--an-btn-bg); color:var(--an-btn-fg);
+    border-color:var(--an-btn-bg); }
+  #__an_foot .an-fbtn.an-submit:hover { filter:brightness(1.1); }
   #__an_foot .an-fbtn svg { width:15px; height:15px; }
 
   /* ---- composer popover -------------------------------------------------- */
@@ -1002,9 +1019,56 @@
 
   function showResolvedVisuals() { return state.filter !== "open"; }
 
+  var proposalRestores = [];
+  function restoreProposalPreviews() {
+    while (proposalRestores.length) proposalRestores.pop()();
+  }
+  function applyProposalPreviews() {
+    if (!CFG.contentEditing) return;
+    state.comments.forEach(function (c) {
+      if (c.resolved || !c.proposal || !c.geom || !c.geom.selector) return;
+      var target = resolveAnchorEl(c.geom.selector);
+      if (!target || isOurs(target) || /^(HTML|BODY)$/.test(target.nodeName)) return;
+      if (c.proposal.text && typeof c.proposal.text.after === "string" && canProposeText(target)) {
+        var children = Array.prototype.slice.call(target.childNodes);
+        children.forEach(function (child) { target.removeChild(child); });
+        target.textContent = c.proposal.text.after.slice(0, 5000);
+        var previewTextNode = target.firstChild;
+        proposalRestores.push(function () {
+          if (target.childNodes.length !== 1 || target.firstChild !== previewTextNode) return;
+          while (target.firstChild) target.removeChild(target.firstChild);
+          children.forEach(function (child) { target.appendChild(child); });
+        });
+      }
+      var image = c.proposal.image;
+      if (!image || !image.attachment || !image.attachment.url) return;
+      var imageUrl = safeSameOriginUrl(image.attachment.url);
+      if (!imageUrl) return;
+      if (target.nodeName === "IMG" || image.action === "replace") {
+        var previous = { src: target.getAttribute("src"), srcset: target.getAttribute("srcset"), alt: target.getAttribute("alt") };
+        target.setAttribute("src", imageUrl);
+        target.removeAttribute("srcset");
+        target.setAttribute("alt", image.alt || "");
+        proposalRestores.push(function () {
+          if (target.getAttribute("src") !== imageUrl) return;
+          Object.keys(previous).forEach(function (name) {
+            if (previous[name] == null) target.removeAttribute(name);
+            else target.setAttribute(name, previous[name]);
+          });
+        });
+      } else {
+        var preview = el("img", { class: "an-proposal-image", src: imageUrl, alt: image.alt || "", "data-annotate-ui": "" });
+        target.appendChild(preview);
+        proposalRestores.push(function () { preview.remove(); });
+      }
+    });
+  }
+
   function renderAll() {
     ensureOverlay();
     clearVisuals();
+    restoreProposalPreviews();
+    applyProposalPreviews();
     sizeOverlay();
     state.comments.forEach(function (c) {
       if (c.resolved && !showResolvedVisuals()) return;
@@ -1522,12 +1586,17 @@
       });
       crumb.addEventListener("click", function (e) {
         e.stopPropagation();
-        showInspectTarget(part, true);
+        switchInspectTarget(part);
         if (elementWrap) inspectCrumbs.querySelector(".an-selected").focus();
-        openElementDialog();
       });
       inspectCrumbs.appendChild(crumb);
     });
+  }
+  function switchInspectTarget(node) {
+    var reopen = !!elementWrap;
+    if (reopen) closeElementDialog();
+    showInspectTarget(node, true);
+    if (reopen) openElementDialog();
   }
   function closeElementDialog() {
     if (inspectReleaseFocus) inspectReleaseFocus();
@@ -1545,12 +1614,33 @@
     var title = el("h2", { id: "__an_element_title", text: "Classify selected element" });
     elementSummaryEl = el("div", { id: "__an_element_summary", text: inspectLabel.textContent });
     var verdicts = el("div", { class: "an-verdicts", role: "group", "aria-label": "Verdict" });
+    var proposalFields = null, proposedText = null, proposedImage = null, proposedAlt = null;
+    var proposalKids = [];
+    var canEditText = canProposeText(inspectTarget);
+    if (CFG.contentEditing && canEditText) {
+      proposedText = el("textarea", { id: "__an_proposed_text", class: "an-ta", rows: "3", maxlength: "5000" });
+      proposedText.value = String(inspectTarget.innerText || inspectTarget.textContent || "").replace(/\s+/g, " ").trim();
+      proposalKids = proposalKids.concat([
+        el("label", { for: "__an_proposed_text", text: "Proposed text" }),
+        proposedText,
+      ]);
+    }
+    if (CFG.contentEditing && CFG.uploadAttachment) {
+      proposedImage = el("input", { id: "__an_proposed_image", class: "an-input", type: "file", accept: "image/jpeg,image/png,image/gif,image/webp,image/avif" });
+      proposedAlt = el("input", { id: "__an_proposed_alt", class: "an-input", type: "text", maxlength: "500", placeholder: "Describe the image for visitors" });
+      proposalKids = proposalKids.concat([
+        el("label", { for: "__an_proposed_image", text: "Proposed image" }), proposedImage,
+        el("label", { for: "__an_proposed_alt", text: "Image description" }), proposedAlt,
+      ]);
+    }
+    if (proposalKids.length) proposalFields = el("div", { class: "an-proposal-fields", hidden: "" }, proposalKids);
     [["keep", "Keep"], ["change", "Change"], ["question", "Question"]].forEach(function (item, index) {
       var verdict = el("button", { type: "button", class: "an-verdict", "data-verdict": item[0],
         "aria-pressed": index === 0 ? "true" : "false", text: item[1] });
       verdict.addEventListener("click", function () {
         verdicts.querySelectorAll(".an-verdict").forEach(function (button) { button.setAttribute("aria-pressed", "false"); });
         verdict.setAttribute("aria-pressed", "true");
+        if (proposalFields) proposalFields.hidden = item[0] !== "change";
       });
       verdicts.appendChild(verdict);
     });
@@ -1563,21 +1653,59 @@
       if (!comment.value.trim()) { comment.reportValidity(); return; }
       var chosen = verdicts.querySelector('.an-verdict[aria-pressed="true"]');
       var verdict = chosen.getAttribute("data-verdict");
+      var selectedTarget = inspectTarget;
       var colors = { keep: "#10b981", change: "#ef4444", question: "#f59e0b" };
-      commitDraft({
-        type: "element",
-        verdict: verdict,
-        text: comment.value.trim(),
-        color: colors[verdict],
-        geom: { kind: "block", selector: elementSelector(inspectTarget) },
-        element: elementMetadata(inspectTarget),
-        context: elementContext(inspectTarget),
+      var file = verdict === "change" && proposedImage && proposedImage.files && proposedImage.files[0];
+      if (file && (!/^image\//.test(file.type) || file.size > 10 * 1024 * 1024)) {
+        toast("Choose a supported image smaller than 10 MB", { kind: "error" });
+        return;
+      }
+      if (file && !proposedAlt.value.trim()) { proposedAlt.required = true; proposedAlt.reportValidity(); return; }
+
+      function finish(attachment) {
+        var draft = {
+          type: "element",
+          verdict: verdict,
+          text: comment.value.trim(),
+          color: colors[verdict],
+          geom: { kind: "block", selector: elementSelector(selectedTarget) },
+          element: elementMetadata(selectedTarget),
+          context: elementContext(selectedTarget),
+        };
+        if (verdict === "change" && proposedText) {
+          var before = String(selectedTarget.innerText || selectedTarget.textContent || "").replace(/\s+/g, " ").trim();
+          var after = proposedText.value.trim();
+          if (after !== before) draft.proposal = { text: { before: before, after: after } };
+        }
+        if (attachment) {
+          if (!draft.proposal) draft.proposal = {};
+          draft.proposal.image = {
+            action: selectedTarget.nodeName === "IMG" ? "replace" : "add",
+            alt: proposedAlt.value.trim(),
+            attachment: attachment,
+          };
+        }
+        commitDraft(draft);
+      }
+
+      if (!file) { finish(null); return; }
+      save.disabled = true;
+      save.textContent = "Uploading…";
+      Promise.resolve().then(function () { return CFG.uploadAttachment(file); }).then(function (attachment) {
+        if (!attachment || !safeHttpUrl(attachment.url)) throw new Error("Upload returned no image URL");
+        if (!save.isConnected || !selectedTarget.isConnected) return;
+        finish(attachment);
+      }).catch(function () {
+        save.disabled = false;
+        save.textContent = "Save annotation";
+        toast("Image upload failed — your annotation was not saved", { kind: "error", duration: 7000 });
       });
     });
     box.appendChild(title);
     box.appendChild(el("p", { class: "an-edesc", text: "Choose a verdict and add the reviewer note." }));
     box.appendChild(elementSummaryEl);
     box.appendChild(verdicts);
+    if (proposalFields) box.appendChild(proposalFields);
     box.appendChild(commentLabel);
     box.appendChild(comment);
     box.appendChild(el("div", { class: "an-eactions" }, [cancel, save]));
@@ -1597,7 +1725,7 @@
       e.preventDefault();
       e.stopPropagation();
       var next = inspectIndex + (e.key === "ArrowUp" ? -1 : 1);
-      if (inspectHierarchy[next]) showInspectTarget(inspectHierarchy[next], true);
+      if (inspectHierarchy[next]) switchInspectTarget(inspectHierarchy[next]);
     }
   }
   function repositionInspectTarget() {
@@ -1957,6 +2085,7 @@
       hidePlus(true);
       if (helpEl) helpEl.classList.remove("an-show");
       clearVisuals();
+      restoreProposalPreviews();
       if (overlay) overlay.style.display = "none";
       if (pinLayer) pinLayer.style.display = "none";
       if (root) root.style.display = "none";
@@ -2197,13 +2326,9 @@
     setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
   }
 
-  function exportComments() {
+  function reviewPayload() {
     var comments = state.comments.slice();
-    if (!comments.length) {
-      toast("No comments on this page to export", { kind: "info" });
-      return;
-    }
-    var payload = {
+    return {
       annotate: VERSION,
       kind: "annotate-export",
       exportedAt: new Date().toISOString(),
@@ -2213,6 +2338,15 @@
       exportedViewport: { vw: window.innerWidth, vh: window.innerHeight, dpr: window.devicePixelRatio || 1 },
       comments: comments,
     };
+  }
+
+  function exportComments() {
+    var payload = reviewPayload();
+    var comments = payload.comments;
+    if (!comments.length) {
+      toast("No comments on this page to export", { kind: "info" });
+      return;
+    }
     var slug = (PAGE || "page").replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "").slice(0, 60) || "page";
     var stamp = new Date().toISOString().slice(0, 10);
     downloadJSON(payload, "annotate-" + slug + "-" + stamp + ".json");
@@ -2340,10 +2474,24 @@
         : "Saved in this browser. Download to send your comments." }),
     ]));
     footEl.appendChild(el("div", { class: "an-footrow" }, [
-      el("button", { class: "an-fbtn" + (n ? " an-pulse" : ""), title: "Download comments as JSON", html: ICONS.download + "<span>Download</span>", onclick: exportComments }),
+      CFG.submitReview ? el("button", { class: "an-fbtn an-submit", html: ICONS.share + "<span>Submit review</span>", onclick: submitReview }) : null,
+      el("button", { class: "an-fbtn" + (n && !CFG.submitReview ? " an-pulse" : ""), title: "Download comments as JSON", html: ICONS.download + "<span>Download</span>", onclick: exportComments }),
       canShare ? el("button", { class: "an-fbtn", title: "Send comments to " + state.share, html: ICONS.share + "<span>Share</span>", onclick: shareComments }) : null,
       el("button", { class: "an-fbtn", html: ICONS.upload + "<span>Import</span>", onclick: pickImportFile }),
     ]));
+  }
+
+  function submitReview(e) {
+    var payload = reviewPayload();
+    if (!payload.comments.length) { toast("Add at least one annotation before submitting", { kind: "info" }); return; }
+    var button = e && e.currentTarget;
+    if (button) button.disabled = true;
+    Promise.resolve(CFG.submitReview(payload)).then(function () {
+      if (button) button.disabled = false;
+    }, function () {
+      if (button) button.disabled = false;
+      toast("Review submission failed — your annotations are still saved here", { kind: "error", duration: 7000 });
+    });
   }
 
   // Copy text to the clipboard with graceful fallback + toast feedback.
@@ -2365,6 +2513,12 @@
     } catch (e) {
       return "";
     }
+  }
+  function safeSameOriginUrl(url) {
+    var safe = safeHttpUrl(url);
+    if (!safe) return "";
+    try { return new URL(safe).origin === location.origin ? safe : ""; }
+    catch (e) { return ""; }
   }
 
   // Build the plain-text review summary used in emails / chat messages.
@@ -2563,6 +2717,7 @@
     focus: function (id) { focusComment(id, false); },
     toast: toast,
     export: function () { exportComments(); },
+    exportData: function () { return JSON.parse(JSON.stringify(reviewPayload())); },
     import: function () { pickImportFile(); },
     clear: function () {
       var d = dbRead();
