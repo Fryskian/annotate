@@ -16,6 +16,9 @@ do_action( 'wp_enqueue_scripts' );
 if ( ! wp_script_is( 'annotate-review', 'enqueued' ) || ! wp_script_is( 'annotate-review-bridge', 'enqueued' ) ) {
 	throw new RuntimeException( 'Public staging visitors do not receive annotation scripts.' );
 }
+if ( ! wp_script_is( 'annotate-review-tour', 'enqueued' ) || ! wp_style_is( 'annotate-review-tour', 'enqueued' ) ) {
+	throw new RuntimeException( 'Public staging visitors do not receive the welcome tour.' );
+}
 $localized = wp_scripts()->get_data( 'annotate-review-bridge', 'data' );
 if ( false === strpos( $localized, '"canUpload":""' ) || false === strpos( $localized, '"publicMode":"1"' ) ) {
 	throw new RuntimeException( 'Public staging configuration did not disable uploads.' );

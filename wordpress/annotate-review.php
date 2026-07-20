@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Annotate Review
  * Description: Collects visual website reviews as portable JSON.
- * Version: 1.2.0
+ * Version: 1.3.0
  * Author: reviewjs contributors
  * License: MIT
  * License URI: https://opensource.org/license/mit
@@ -10,7 +10,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'ANNOTATE_REVIEW_VERSION', '1.2.0' );
+define( 'ANNOTATE_REVIEW_VERSION', '1.3.0' );
 
 function annotate_review_public_mode() {
 	return 'staging' === wp_get_environment_type() && '1' === (string) get_option( 'annotate_review_public_staging', '0' );
@@ -36,6 +36,74 @@ function annotate_review_register_post_type() {
 	);
 }
 add_action( 'init', 'annotate_review_register_post_type' );
+
+function annotate_review_register_tour_page() {
+	add_submenu_page(
+		'edit.php?post_type=annotate_review',
+		__( 'Rondleiding', 'annotate-review' ),
+		__( 'Rondleiding', 'annotate-review' ),
+		'edit_pages',
+		'annotate-review-tour',
+		'annotate_review_tour_page'
+	);
+}
+add_action( 'admin_menu', 'annotate_review_register_tour_page' );
+
+function annotate_review_tour_page() {
+	?>
+	<div class="wrap annotate-review-tour-page">
+		<header class="fc-header">
+			<div class="fc-brand">Forcys <span>Annotate</span></div>
+			<button class="button" id="forcys-restart" type="button"><?php esc_html_e( 'Rondleiding opnieuw starten', 'annotate-review' ); ?></button>
+		</header>
+		<main>
+			<p class="fc-kicker"><?php esc_html_e( 'Veilige oefenomgeving', 'annotate-review' ); ?></p>
+			<h1><?php esc_html_e( 'Welkom bij Forcys Annotate', 'annotate-review' ); ?></h1>
+			<p class="fc-lead"><?php esc_html_e( 'Leer feedback direct op een webpagina te zetten. Je opmerkingen blijven in deze browser en de testknop verstuurt niets.', 'annotate-review' ); ?></p>
+			<section class="fc-practice" aria-labelledby="practice-title">
+				<h2 id="practice-title"><?php esc_html_e( 'Probeer het hier', 'annotate-review' ); ?></h2>
+				<p><?php esc_html_e( 'Selecteer tekst, teken rond een vlak of plaats een pin op een kaart.', 'annotate-review' ); ?></p>
+				<div class="fc-grid">
+					<article class="fc-card" data-demo-target="pin" data-review-block>
+						<strong><?php esc_html_e( 'Nieuwe hero-afbeelding', 'annotate-review' ); ?></strong>
+						<p><?php esc_html_e( 'Plaats hier een pin en vertel welke uitstraling beter bij de campagne past.', 'annotate-review' ); ?></p>
+					</article>
+					<article class="fc-card" data-review-block>
+						<strong><?php esc_html_e( 'Een kortere titel', 'annotate-review' ); ?></strong>
+						<p><?php esc_html_e( 'Markeer deze woorden en schrijf hoe je de boodschap duidelijker zou maken.', 'annotate-review' ); ?></p>
+					</article>
+					<article class="fc-card" data-review-block>
+						<strong><?php esc_html_e( 'Meer ruimte nodig?', 'annotate-review' ); ?></strong>
+						<p><?php esc_html_e( 'Teken een rechthoek of cirkel rond dit vlak en voeg je uitleg toe.', 'annotate-review' ); ?></p>
+					</article>
+				</div>
+			</section>
+		</main>
+	</div>
+	<?php
+}
+
+function annotate_review_tour_admin_assets() {
+	if ( 'annotate-review-tour' !== sanitize_key( wp_unslash( $_GET['page'] ?? '' ) ) ) {
+		return;
+	}
+	$user = wp_get_current_user();
+	wp_enqueue_style( 'annotate-review-tour', plugins_url( 'annotate-review-tour.css', __FILE__ ), array(), ANNOTATE_REVIEW_VERSION );
+	wp_enqueue_script( 'annotate-review-tour', plugins_url( 'annotate-review-tour.js', __FILE__ ), array(), ANNOTATE_REVIEW_VERSION, false );
+	wp_add_inline_script(
+		'annotate-review-tour',
+		'window.AnnotateReviewTour=' . wp_json_encode( array( 'mode' => 'practice', 'autostart' => true, 'reviewer' => $user->display_name ) ) . ';',
+		'before'
+	);
+	wp_enqueue_script(
+		'annotate-review',
+		plugins_url( 'annotate.js', __FILE__ ),
+		array( 'annotate-review-tour' ),
+		ANNOTATE_REVIEW_VERSION,
+		true
+	);
+}
+add_action( 'admin_enqueue_scripts', 'annotate_review_tour_admin_assets' );
 
 function annotate_review_enqueue() {
 	$authorized = current_user_can( 'edit_pages' );
@@ -79,6 +147,17 @@ function annotate_review_enqueue() {
 		ANNOTATE_REVIEW_VERSION,
 		true
 	);
+	if ( 'staging' === wp_get_environment_type() ) {
+		wp_enqueue_style( 'annotate-review-tour', plugins_url( 'annotate-review-tour.css', __FILE__ ), array(), ANNOTATE_REVIEW_VERSION );
+		wp_enqueue_script(
+			'annotate-review-tour',
+			plugins_url( 'annotate-review-tour.js', __FILE__ ),
+			array( 'annotate-review' ),
+			ANNOTATE_REVIEW_VERSION,
+			true
+		);
+		wp_add_inline_script( 'annotate-review-tour', 'window.AnnotateReviewTour={mode:"frontend",autostart:false};', 'before' );
+	}
 }
 add_action( 'wp_enqueue_scripts', 'annotate_review_enqueue' );
 

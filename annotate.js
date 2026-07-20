@@ -1000,6 +1000,8 @@
     sizeOverlay();
   }
   function sizeOverlay() {
+    overlay.style.width = "0";
+    overlay.style.height = "0";
     var w = Math.max(document.documentElement.scrollWidth, window.innerWidth);
     var h = Math.max(document.documentElement.scrollHeight, window.innerHeight);
     overlay.setAttribute("width", w);
@@ -1023,7 +1025,9 @@
       parent.removeChild(m);
       parent.normalize();
     });
-    if (overlay) while (overlay.firstChild) overlay.removeChild(overlay.firstChild);
+    if (overlay) Array.prototype.slice.call(overlay.childNodes).forEach(function (node) {
+      if (!drawing || node !== drawing.node) overlay.removeChild(node);
+    });
     if (pinLayer) pinLayer.innerHTML = "";
   }
 
@@ -1383,8 +1387,7 @@
   function onDown(e) {
     if (!state.enabled) return;
     if (e.button !== 0 && e.pointerType === "mouse") return;
-    if (e.target.closest && (e.target.closest("#__an_bar") || e.target.closest("#__an_panel") || e.target.closest("#__an_compose") || e.target.closest("#__an_toasts")))
-      return;
+    if (isOurs(e.target)) return;
     var t = state.tool;
     if (t === "pin") {
       var anchorEl = pickAnchor(e.target);

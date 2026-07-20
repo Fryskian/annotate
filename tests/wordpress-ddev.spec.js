@@ -7,6 +7,14 @@ const publicMode = process.env.WP_PUBLIC_MODE === '1';
 test.skip(!baseURL, 'Set WP_BASE_URL to run the DDEV WordPress integration tests.');
 test.use({ ignoreHTTPSErrors: true });
 
+async function loginAdmin(page) {
+  await page.goto(`${baseURL}/wp-login.php`);
+  await page.locator('#user_login').fill('admin');
+  await page.locator('#user_pass').fill('annotate-test-only');
+  await page.locator('#wp-submit').click();
+  await page.waitForURL(/wp-admin/);
+}
+
 test('does not load annotation tools for signed-out visitors', async ({ page }) => {
   test.skip(publicMode, 'Public staging mode intentionally loads the annotation tools.');
   await page.goto(baseURL);
@@ -16,13 +24,10 @@ test('does not load annotation tools for signed-out visitors', async ({ page }) 
 
 test('admin proposes text and an image, then submits the review', async ({ page }) => {
   test.skip(publicMode, 'Public staging mode intentionally disables image uploads.');
-  await page.goto(`${baseURL}/wp-login.php`);
-  await page.locator('#user_login').fill('admin');
-  await page.locator('#user_pass').fill('annotate-test-only');
-  await page.locator('#wp-submit').click();
-  await page.waitForURL(/wp-admin/);
+  await loginAdmin(page);
   await page.goto(baseURL);
   await page.waitForFunction(() => !!window.Annotate);
+  await expect(page.locator('#forcys-tour-help')).toHaveCount(0);
 
   await page.locator('#wp-admin-bar-annotate-review > a').click();
   await expect(page.locator('#__an_bar')).toBeVisible();
@@ -79,6 +84,37 @@ test('admin proposes text and an image, then submits the review', async ({ page 
   await expect.poll(async () => JSON.stringify(await (await page.request.get(mailpitURL)).json())).toContain(`Website review #${result.id} submitted`);
 });
 
+test('admin welcome tour uses the bundled runtime and submits only in memory', async ({ page }) => {
+  await loginAdmin(page);
+  const submissions = [];
+  page.on('request', request => {
+    if (request.method() === 'POST' && request.url().includes('/wp-json/annotate/v1/reviews')) submissions.push(request.url());
+  });
+  await page.goto(`${baseURL}/wp-admin/edit.php?post_type=annotate_review&page=annotate-review-tour`);
+  await page.waitForFunction(() => !!window.Annotate);
+
+  const welcome = page.getByRole('dialog', { name: 'Welkom bij Forcys Annotate' });
+  await expect(welcome).toBeVisible();
+  await welcome.getByRole('button', { name: 'Start de rondleiding' }).click();
+  const guide = page.locator('#forcys-tour');
+  for (const tool of ['cursor', 'inspect', 'highlight', 'rect', 'circle', 'pen', 'pin']) {
+    await expect(page.locator(`[data-tool="${tool}"]`)).toHaveClass(/an-on/);
+    if (tool !== 'pin') await guide.getByRole('button', { name: 'Volgende' }).click();
+  }
+
+  await page.locator('[data-demo-target="pin"]').click({ position: { x: 70, y: 60 } });
+  await page.locator('#__an_compose textarea').fill('Dit is mijn veilige testopmerking.');
+  await page.locator('#__an_compose .an-primary').click();
+  await guide.getByRole('button', { name: 'Volgende' }).click();
+  await guide.getByRole('button', { name: 'Volgende' }).click();
+  await guide.getByRole('button', { name: 'Volgende' }).click();
+  await page.locator('#__an_foot .an-submit').click();
+
+  await expect(page.locator('#forcys-tour-status')).toHaveText('Testreview ontvangen — er is niets verzonden.');
+  expect(await page.evaluate(() => window.__forcysDemoSubmission.comments.length)).toBe(1);
+  expect(submissions).toEqual([]);
+});
+
 test('public staging visitors can submit text-only reviews', async ({ page }) => {
   test.skip(!publicMode, 'Set WP_PUBLIC_MODE=1 after enabling the WordPress staging option.');
   await page.goto(baseURL);
@@ -87,6 +123,16 @@ test('public staging visitors can submit text-only reviews', async ({ page }) =>
   await page.locator('#__an_launch').click();
   await page.locator('#__an_namewrap input').fill('Public Reviewer');
   await page.locator('#__an_namewrap button').click();
+
+  const help = page.locator('#forcys-tour-help');
+  await expect(help).toBeVisible();
+  const helpBox = await help.boundingBox();
+  const hideBox = await page.getByRole('button', { name: 'Hide review tools' }).boundingBox();
+  expect(helpBox.y).toBeGreaterThan(hideBox.y);
+  await help.click();
+  const welcome = page.getByRole('dialog', { name: 'Welkom bij Forcys Annotate' });
+  await expect(welcome).toBeVisible();
+  await welcome.getByRole('button', { name: 'Nu overslaan' }).click();
 
   await page.locator('[data-tool="inspect"]').click();
   const target = page.locator('#review-heading');

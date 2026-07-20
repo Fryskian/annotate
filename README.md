@@ -100,6 +100,13 @@ Reviewers can then:
 4. Choose **Submit review**, add an overall message, and submit.
 5. Download the portable JSON from **Design Reviews** in wp-admin.
 
+Editors can learn the workflow under **Design Reviews → Rondleiding**. That
+practice page uses the bundled Annotate runtime, but its test submission stays
+in the browser and creates no review, email, upload, or network request. On a
+staging frontend, the `?` button at the bottom of the Annotate toolbar opens
+the same Dutch guide on the real page; submissions there keep their normal
+WordPress behavior.
+
 Annotations remain in the reviewer's local storage until submitted. Submission
 uses WordPress cookie authentication, a REST nonce, native capabilities,
 `wp_mail()`, the Media Library, and a private custom post type—no external

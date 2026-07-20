@@ -1,0 +1,59 @@
+.annotate-review-tour-page {
+	--fc-surface: #fffdf7;
+	--fc-ink: #1f2328;
+	--fc-muted: #62596b;
+	--fc-line: #ded3c1;
+	--fc-accent: #6d28d9;
+	--fc-yellow: #fcd34d;
+	max-width: 1120px;
+	color: var(--fc-ink);
+}
+.annotate-review-tour-page * { box-sizing: border-box; }
+.annotate-review-tour-page .fc-header { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 22px 0; }
+.annotate-review-tour-page .fc-brand { font-size: 20px; font-weight: 850; letter-spacing: -.03em; }
+.annotate-review-tour-page .fc-brand span { color: var(--fc-accent); }
+.annotate-review-tour-page main { padding: clamp(42px, 7vw, 82px) clamp(22px, 5vw, 58px) 80px; border: 1px solid var(--fc-line); border-radius: 16px; background: #f7f1e5; }
+.annotate-review-tour-page .fc-kicker { margin: 0; color: var(--fc-accent); font-size: 13px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+.annotate-review-tour-page h1 { max-width: 760px; margin: 12px 0 18px; color: var(--fc-ink); font-size: clamp(38px, 6vw, 68px); line-height: 1.03; letter-spacing: -.05em; }
+.annotate-review-tour-page .fc-lead { max-width: 700px; margin: 0; color: var(--fc-muted); font-size: clamp(18px, 2vw, 22px); line-height: 1.55; }
+.annotate-review-tour-page .fc-practice { margin-top: 50px; }
+.annotate-review-tour-page .fc-practice h2 { margin: 0 0 8px; font-size: 25px; }
+.annotate-review-tour-page .fc-practice > p { margin: 0; color: var(--fc-muted); }
+.annotate-review-tour-page .fc-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 24px; }
+.annotate-review-tour-page .fc-card { min-height: 190px; padding: 24px; border: 1px solid var(--fc-line); border-radius: 14px; background: var(--fc-surface); }
+.annotate-review-tour-page .fc-card strong { display: block; margin-bottom: 10px; font-size: 18px; }
+.annotate-review-tour-page .fc-card p { margin: 0; color: var(--fc-muted); line-height: 1.65; }
+
+#forcys-welcome { width: min(560px, calc(100% - 28px)); padding: 0; border: 1px solid #ded3c1; border-radius: 18px; background: #fffdf7; color: #1f2328; box-shadow: 0 28px 80px rgba(31, 35, 40, .3); }
+#forcys-welcome::backdrop { background: rgba(20, 17, 28, .62); }
+#forcys-welcome .fc-welcome-body { padding: clamp(24px, 5vw, 38px); }
+#forcys-welcome .fc-kicker { margin: 0; color: #6d28d9; font-size: 13px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+#forcys-welcome h2 { margin: 8px 0 12px; font-size: clamp(28px, 5vw, 40px); line-height: 1.08; letter-spacing: -.035em; }
+#forcys-welcome p { margin: 0; color: #62596b; font-size: 17px; line-height: 1.6; }
+#forcys-welcome ul { margin: 22px 0; padding-left: 22px; color: #62596b; line-height: 1.7; }
+.fc-actions, .fc-tour-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
+.fc-guide-button { min-height: 42px; padding: 9px 15px; border: 1px solid #ded3c1; border-radius: 9px; background: #fffdf7; color: #1f2328; font-weight: 750; cursor: pointer; }
+.fc-guide-button-primary { border-color: #6d28d9; background: #6d28d9; color: #fff; }
+.fc-guide-button:focus-visible, #forcys-tour-help:focus-visible { outline: 3px solid #6d28d9; outline-offset: 3px; }
+
+#forcys-tour { position: fixed; z-index: 2147483646; top: 42px; left: 18px; width: min(390px, calc(100vw - 36px)); padding: 18px; border: 1px solid #ded3c1; border-radius: 14px; background: #fffdf7; color: #1f2328; box-shadow: 0 20px 60px rgba(31, 35, 40, .28); font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+#forcys-tour[hidden] { display: none; }
+#forcys-tour .fc-tour-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+#forcys-tour-progress { color: #6d28d9; font-size: 12px; font-weight: 850; letter-spacing: .08em; text-transform: uppercase; }
+#forcys-tour-close { width: 36px; height: 36px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: #62596b; cursor: pointer; font-size: 24px; line-height: 1; }
+#forcys-tour-title { margin: 12px 0 7px; font-size: 21px; line-height: 1.2; }
+#forcys-tour-copy { min-height: 70px; margin: 0; color: #62596b; line-height: 1.55; }
+#forcys-tour-status { min-height: 24px; margin: 12px 0 0; color: #087548; font-weight: 750; }
+.forcys-tour-target { outline: 4px solid #fcd34d !important; outline-offset: 4px !important; }
+#forcys-tour-help { font-size: 17px; font-weight: 850; }
+
+@media (max-width: 720px) {
+	.annotate-review-tour-page .fc-header { align-items: flex-start; flex-direction: column; }
+	.annotate-review-tour-page .fc-grid { grid-template-columns: 1fr; }
+	.annotate-review-tour-page .fc-card { min-height: 140px; }
+	#forcys-tour { top: auto; right: 10px; bottom: 10px; left: 10px; width: auto; }
+	#forcys-tour.fc-tour-final { top: 42px; bottom: auto; }
+	#forcys-tour-copy { min-height: 0; }
+	.fc-actions { align-items: stretch; flex-direction: column-reverse; }
+}
+@media (prefers-reduced-motion: reduce) { #forcys-tour *, #forcys-welcome * { transition: none !important; } }
