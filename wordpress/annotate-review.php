@@ -1,8 +1,8 @@
 <?php
 /**
  * Plugin Name: Annotate Review
- * Description: Collects authenticated visual website reviews as portable JSON.
- * Version: 1.1.0
+ * Description: Collects visual website reviews as portable JSON.
+ * Version: 1.2.0
  * Author: reviewjs contributors
  * License: MIT
  * License URI: https://opensource.org/license/mit
@@ -10,7 +10,11 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'ANNOTATE_REVIEW_VERSION', '1.1.0' );
+define( 'ANNOTATE_REVIEW_VERSION', '1.2.0' );
+
+function annotate_review_public_mode() {
+	return 'staging' === wp_get_environment_type() && '1' === (string) get_option( 'annotate_review_public_staging', '0' );
+}
 
 function annotate_review_register_post_type() {
 	register_post_type(
@@ -34,7 +38,9 @@ function annotate_review_register_post_type() {
 add_action( 'init', 'annotate_review_register_post_type' );
 
 function annotate_review_enqueue() {
-	if ( ! current_user_can( 'edit_pages' ) ) {
+	$authorized = current_user_can( 'edit_pages' );
+	$public     = annotate_review_public_mode();
+	if ( ! $authorized && ! $public ) {
 		return;
 	}
 	$user = wp_get_current_user();
@@ -49,11 +55,13 @@ function annotate_review_enqueue() {
 		'annotate-review-bridge',
 		'AnnotateWordPress',
 		array(
-			'restUrl'  => rest_url( 'annotate/v1/reviews' ),
-			'mediaUrl' => rest_url( 'wp/v2/media' ),
-			'nonce'    => wp_create_nonce( 'wp_rest' ),
-			'canUpload' => current_user_can( 'upload_files' ),
-			'reviewer' => array(
+			'restUrl'     => rest_url( 'annotate/v1/reviews' ),
+			'mediaUrl'    => rest_url( 'wp/v2/media' ),
+			'nonce'       => wp_create_nonce( $authorized ? 'wp_rest' : 'annotate_review_public' ),
+			'nonceHeader' => $authorized ? 'X-WP-Nonce' : 'X-Annotate-Nonce',
+			'canUpload'   => $authorized && ! $public && current_user_can( 'upload_files' ),
+			'publicMode'  => $public,
+			'reviewer'    => array(
 				'name'  => $user->display_name,
 				'email' => $user->user_email,
 			),
@@ -89,13 +97,31 @@ function annotate_review_admin_bar( WP_Admin_Bar $bar ) {
 add_action( 'admin_bar_menu', 'annotate_review_admin_bar', 90 );
 
 function annotate_review_can_submit( WP_REST_Request $request ) {
-	return current_user_can( 'edit_pages' ) && wp_verify_nonce( $request->get_header( 'X-WP-Nonce' ), 'wp_rest' );
+	if ( current_user_can( 'edit_pages' ) ) {
+		return (bool) wp_verify_nonce( $request->get_header( 'X-WP-Nonce' ), 'wp_rest' );
+	}
+	return annotate_review_public_mode() && (bool) wp_verify_nonce( $request->get_header( 'X-Annotate-Nonce' ), 'annotate_review_public' );
+}
+
+function annotate_review_public_rate_limit() {
+	$ip         = sanitize_text_field( wp_unslash( $_SERVER['REMOTE_ADDR'] ?? 'unknown' ) );
+	$ip_key     = 'annotate_review_ip_' . md5( $ip . wp_salt( 'nonce' ) );
+	$site_key   = 'annotate_review_site_limit';
+	$ip_count   = (int) get_transient( $ip_key );
+	$site_count = (int) get_transient( $site_key );
+	if ( $ip_count >= 5 || $site_count >= 50 ) {
+		return new WP_Error( 'annotate_rate_limited', __( 'Too many reviews were submitted. Please try again later.', 'annotate-review' ), array( 'status' => 429 ) );
+	}
+	set_transient( $ip_key, $ip_count + 1, HOUR_IN_SECONDS );
+	set_transient( $site_key, $site_count + 1, HOUR_IN_SECONDS );
+	return true;
 }
 
 function annotate_review_submit( WP_REST_Request $request ) {
-	$params   = $request->get_json_params();
-	$params   = is_array( $params ) ? $params : $request->get_body_params();
-	$review   = isset( $params['review'] ) && is_array( $params['review'] ) ? $params['review'] : null;
+	$public_request = ! current_user_can( 'edit_pages' ) && annotate_review_public_mode();
+	$params         = $request->get_json_params();
+	$params         = is_array( $params ) ? $params : $request->get_body_params();
+	$review         = isset( $params['review'] ) && is_array( $params['review'] ) ? $params['review'] : null;
 	$reviewer = isset( $params['reviewer'] ) && is_array( $params['reviewer'] ) ? $params['reviewer'] : array();
 	$name     = sanitize_text_field( $reviewer['name'] ?? '' );
 	$email    = sanitize_email( $reviewer['email'] ?? '' );
@@ -134,6 +160,9 @@ function annotate_review_submit( WP_REST_Request $request ) {
 
 		$has_image     = isset( $comment['proposal']['image'] );
 		$attachment_id = absint( $comment['proposal']['image']['attachment']['id'] ?? 0 );
+		if ( $has_image && annotate_review_public_mode() ) {
+			return new WP_Error( 'annotate_public_images_disabled', __( 'Image proposals are disabled for public staging reviews.', 'annotate-review' ), array( 'status' => 400 ) );
+		}
 		if ( $has_image && ! $attachment_id ) {
 			return new WP_Error( 'annotate_invalid_attachment', __( 'The review contains an unavailable image.', 'annotate-review' ), array( 'status' => 400 ) );
 		}
@@ -153,6 +182,12 @@ function annotate_review_submit( WP_REST_Request $request ) {
 			);
 		}
 	}
+	if ( $public_request ) {
+		$rate_limit = annotate_review_public_rate_limit();
+		if ( is_wp_error( $rate_limit ) ) {
+			return $rate_limit;
+		}
+	}
 
 	$path    = wp_parse_url( $url, PHP_URL_PATH ) ?: '/';
 	$post_id = wp_insert_post(
@@ -169,11 +204,14 @@ function annotate_review_submit( WP_REST_Request $request ) {
 	}
 
 	$submitter = wp_get_current_user();
+	$submitted_by = $submitter->exists()
+		? array( 'id' => $submitter->ID, 'name' => $submitter->display_name, 'email' => $submitter->user_email )
+		: null;
 	$review['submission'] = array(
 		'id'          => $post_id,
 		'submittedAt' => current_time( 'c', true ),
 		'reviewer'    => array( 'name' => $name, 'email' => $email ),
-		'submittedBy' => array( 'id' => $submitter->ID, 'name' => $submitter->display_name, 'email' => $submitter->user_email ),
+		'submittedBy' => $submitted_by,
 		'message'     => $message,
 		'counts'      => $counts,
 	);
@@ -186,18 +224,21 @@ function annotate_review_submit( WP_REST_Request $request ) {
 	update_post_meta( $post_id, '_annotate_counts', $counts );
 	update_post_meta( $post_id, '_annotate_message', $message );
 
-	$edit_url  = get_edit_post_link( $post_id, '' );
-	$export_url = wp_nonce_url(
+	$edit_url   = admin_url( 'post.php?post=' . $post_id . '&action=edit' );
+	$export_url = $public_request ? null : wp_nonce_url(
 		admin_url( 'admin-post.php?action=annotate_review_export&review=' . $post_id ),
 		'annotate_review_export_' . $post_id
 	);
 	$recipient = sanitize_email( get_option( 'annotate_review_recipient', get_option( 'admin_email' ) ) );
 	$recipient = $recipient ?: sanitize_email( get_option( 'admin_email' ) );
 	$subject   = sprintf( __( 'Website review #%d submitted', 'annotate-review' ), $post_id );
+	$sender    = $submitted_by
+		? sprintf( __( '%1$s <%2$s> submitted a website review.', 'annotate-review' ), $submitter->display_name, $submitter->user_email )
+		: sprintf( __( '%1$s <%2$s> submitted a public staging review.', 'annotate-review' ), $name, $email );
 	$body      = implode(
 		"\n",
 		array(
-			sprintf( __( '%1$s <%2$s> submitted a website review.', 'annotate-review' ), $submitter->display_name, $submitter->user_email ),
+			$sender,
 			sprintf( __( 'Review contact: %1$s <%2$s>', 'annotate-review' ), $name, $email ),
 			$url,
 			$message,
@@ -211,7 +252,7 @@ function annotate_review_submit( WP_REST_Request $request ) {
 		array(
 			'id'        => $post_id,
 			'mailSent'  => $mail_sent,
-			'adminUrl'  => $edit_url,
+			'adminUrl'  => $public_request ? null : $edit_url,
 			'exportUrl' => $export_url,
 		),
 		201
@@ -263,6 +304,21 @@ function annotate_review_settings() {
 		'annotate_review_recipient_field',
 		'general'
 	);
+	register_setting(
+		'general',
+		'annotate_review_public_staging',
+		array(
+			'type'              => 'string',
+			'sanitize_callback' => 'annotate_review_sanitize_public_staging',
+			'default'           => '0',
+		)
+	);
+	add_settings_field(
+		'annotate_review_public_staging',
+		__( 'Public staging reviews', 'annotate-review' ),
+		'annotate_review_public_staging_field',
+		'general'
+	);
 }
 add_action( 'admin_init', 'annotate_review_settings' );
 
@@ -272,6 +328,23 @@ function annotate_review_recipient_field() {
 		'<input class="regular-text" type="email" name="annotate_review_recipient" value="%s" required><p class="description">%s</p>',
 		esc_attr( $value ),
 		esc_html__( 'Receives a link and summary when an authorized reviewer submits annotations.', 'annotate-review' )
+	);
+}
+
+function annotate_review_sanitize_public_staging( $value ) {
+	return 'staging' === wp_get_environment_type() && $value ? '1' : '0';
+}
+
+function annotate_review_public_staging_field() {
+	$staging = 'staging' === wp_get_environment_type();
+	printf(
+		'<label><input type="checkbox" name="annotate_review_public_staging" value="1" %s %s> %s</label><p class="description">%s</p>',
+		checked( get_option( 'annotate_review_public_staging', '0' ), '1', false ),
+		disabled( $staging, false, false ),
+		esc_html__( 'Let visitors annotate and submit reviews', 'annotate-review' ),
+		esc_html( $staging
+			? __( 'Image uploads are disabled. Public submissions are rate-limited and stored privately.', 'annotate-review' )
+			: __( 'Available only when WP_ENVIRONMENT_TYPE is staging.', 'annotate-review' ) )
 	);
 }
 

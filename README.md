@@ -41,7 +41,7 @@ That single line is the whole installation.
 | ▭ **Rectangle** | Draw a box around any region |
 | ◯ **Circle** | Circle anything that needs attention |
 | 📍 **Pin** | Drop a point marker anywhere |
-| 〰️ **Freehand** | Sketch directly on the page |
+| 〰️ **Freehand** | Sketch directly on the page; hold Ctrl/⌘ when releasing to add another stroke |
 | ➕ **Section note** | Hover any paragraph/heading for a margin comment button |
 
 Plus: threaded replies, resolve/reopen, search & filter, deep-links to a single
@@ -76,11 +76,11 @@ license, and original reviewjs/annotate attribution remain intact.
 
 ## WordPress plugin
 
-The optional WordPress adapter loads the same local `annotate.js` only for
-signed-in users who can `edit_pages`. It adds **Annotate page** to the front-end
-admin bar, supports proposed text and Media Library images, stores submitted
-reviews as private **Design Reviews**, emails a summary, and provides a secure
-JSON download for Codex.
+By default, the optional WordPress adapter loads the same local `annotate.js`
+only for signed-in users who can `edit_pages`. It adds **Annotate page** to the
+front-end admin bar, supports proposed text and Media Library images, stores
+submitted reviews as private **Design Reviews**, emails a summary, and provides
+a secure JSON download for Codex.
 
 ```bash
 node scripts/build-wordpress.mjs
@@ -109,6 +109,22 @@ protected-media solution. Image proposals upload immediately so they survive a
 refresh; abandoning a draft can therefore leave an unattached Media Library
 item that an administrator may remove during normal media cleanup.
 
+### Public staging reviews
+
+To let anyone review a staging site without a WordPress account, define the
+environment in `wp-config.php`:
+
+```php
+define( 'WP_ENVIRONMENT_TYPE', 'staging' );
+```
+
+Then enable **Public staging reviews** under **Settings → General**. This mode
+cannot activate on local, development, or production environments, even if its
+database option is copied there. Public reviews are stored privately and can
+send the normal notification email, but image proposals and Media Library
+uploads are disabled. The submission endpoint limits anonymous traffic to five
+reviews per IP address and 50 reviews per site per hour.
+
 For the optional DDEV browser check, install the built plugin in a WordPress
 fixture and run:
 
@@ -116,12 +132,20 @@ fixture and run:
 WP_BASE_URL=https://annotate-wp-test.ddev.site npx playwright test tests/wordpress-ddev.spec.js --project=chromium
 ```
 
+Add `WP_PUBLIC_MODE=1` to that command when the fixture is configured for the
+public staging mode.
+
 Proposed edits extend ordinary element comments without breaking older imports:
 
 ```json
 {
   "type": "element",
   "verdict": "change",
+  "scope": {
+    "kind": "similar",
+    "selector": "article.story-row",
+    "matchCount": 6
+  },
   "proposal": {
     "text": { "before": "Old heading", "after": "Approved heading" },
     "image": {
@@ -409,6 +433,11 @@ Annotate.version;             // "1.0.1"
   "color": "#f59e0b",
   "anchor": { "exact": "…", "prefix": "…", "suffix": "…" },
   "geom": null,
+  "context": {
+    "url": "https://example.com/pricing?variant=annual",
+    "viewport": { "width": 1440, "height": 1000, "dpr": 2 },
+    "scroll": { "x": 0, "y": 640 }
+  },
   "resolved": false,
   "replies": [],
   "createdAt": "2026-06-16T10:00:00.000Z",
@@ -427,6 +456,7 @@ Annotate.version;             // "1.0.1"
 | `R` | Rectangle | `O` | Show / hide tools |
 | `C` | Circle | `Esc` | Cancel |
 | `D` | Freehand | `?` | Shortcuts card |
+| `Ctrl/⌘ + release` | Add a freehand stroke | `Ctrl/⌘ + Enter` | Comment / submit |
 
 ---
 

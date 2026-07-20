@@ -1,5 +1,13 @@
 <?php
 
+update_option( 'annotate_review_public_staging', '1' );
+if ( ! function_exists( 'annotate_review_public_mode' ) ) {
+	throw new RuntimeException( 'The environment-gated public mode is missing.' );
+}
+if ( annotate_review_public_mode() ) {
+	throw new RuntimeException( 'Public mode was enabled outside the staging environment.' );
+}
+
 $subscriber_id = username_exists( 'review-subscriber' );
 if ( ! $subscriber_id ) {
 	$subscriber_id = wp_create_user( 'review-subscriber', 'test-only-password', 'subscriber@example.test' );

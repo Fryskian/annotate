@@ -3,16 +3,19 @@ const path = require('node:path');
 const { test, expect } = require('@playwright/test');
 
 const baseURL = process.env.WP_BASE_URL;
+const publicMode = process.env.WP_PUBLIC_MODE === '1';
 test.skip(!baseURL, 'Set WP_BASE_URL to run the DDEV WordPress integration tests.');
 test.use({ ignoreHTTPSErrors: true });
 
 test('does not load annotation tools for signed-out visitors', async ({ page }) => {
+  test.skip(publicMode, 'Public staging mode intentionally loads the annotation tools.');
   await page.goto(baseURL);
   expect(await page.evaluate(() => !!window.Annotate)).toBe(false);
   await expect(page.locator('#wp-admin-bar-annotate-review')).toHaveCount(0);
 });
 
 test('admin proposes text and an image, then submits the review', async ({ page }) => {
+  test.skip(publicMode, 'Public staging mode intentionally disables image uploads.');
   await page.goto(`${baseURL}/wp-login.php`);
   await page.locator('#user_login').fill('admin');
   await page.locator('#user_pass').fill('annotate-test-only');
@@ -74,4 +77,36 @@ test('admin proposes text and an image, then submits the review', async ({ page 
 
   const mailpitURL = `http://${new URL(baseURL).hostname}:8025/api/v1/messages`;
   await expect.poll(async () => JSON.stringify(await (await page.request.get(mailpitURL)).json())).toContain(`Website review #${result.id} submitted`);
+});
+
+test('public staging visitors can submit text-only reviews', async ({ page }) => {
+  test.skip(!publicMode, 'Set WP_PUBLIC_MODE=1 after enabling the WordPress staging option.');
+  await page.goto(baseURL);
+  await page.waitForFunction(() => !!window.Annotate);
+  await expect(page.locator('#wp-admin-bar-annotate-review')).toHaveCount(0);
+  await page.locator('#__an_launch').click();
+  await page.locator('#__an_namewrap input').fill('Public Reviewer');
+  await page.locator('#__an_namewrap button').click();
+
+  await page.locator('[data-tool="inspect"]').click();
+  const target = page.locator('#review-heading');
+  const box = await target.boundingBox();
+  await page.mouse.click(box.x + 5, box.y + 5);
+  await page.getByRole('button', { name: 'Change' }).click();
+  await expect(page.getByLabel('Proposed text')).toBeVisible();
+  await expect(page.getByLabel('Proposed image')).toHaveCount(0);
+  await page.getByRole('textbox', { name: 'Comment', exact: true }).fill('Use the public-review headline.');
+  await page.getByLabel('Proposed text').fill('Public staging headline');
+  await page.getByRole('button', { name: 'Save annotation' }).click();
+  await page.getByRole('button', { name: 'Submit review' }).click();
+
+  const dialog = page.getByRole('dialog', { name: 'Submit review' });
+  await page.getByLabel('Your name').fill('Public Reviewer');
+  await page.getByLabel('Your email').fill('public@example.test');
+  const responsePromise = page.waitForResponse(response => response.url().includes('/wp-json/annotate/v1/reviews'));
+  await dialog.getByRole('button', { name: 'Submit review' }).click();
+  const response = await responsePromise;
+  expect(response.status()).toBe(201);
+  expect(await response.json()).toMatchObject({ adminUrl: null, exportUrl: null });
+  await expect(dialog.getByRole('status')).toContainText(/Review #\d+ saved and email sent\./);
 });

@@ -172,6 +172,14 @@
     }
     return "c" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 10);
   }
+  function commentContext(extra) {
+    var viewport = { width: window.innerWidth, height: window.innerHeight, dpr: window.devicePixelRatio || 1 };
+    return Object.assign({
+      url: location.href,
+      viewport: Object.assign(viewport, extra && extra.viewport || {}),
+      scroll: { x: window.scrollX, y: window.scrollY },
+    }, extra || {}, { viewport: viewport });
+  }
   function pageComments() {
     return dbRead().comments.filter(function (c) { return c.page === PAGE; });
   }
@@ -187,6 +195,7 @@
       color: draft.color || state.color,
       anchor: draft.anchor || null,
       geom: draft.geom || null,
+      context: commentContext(draft.context),
       resolved: false,
       replies: [],
       createdAt: now,
@@ -194,7 +203,7 @@
     };
     if (draft.verdict) c.verdict = draft.verdict;
     if (draft.element) c.element = draft.element;
-    if (draft.context) c.context = draft.context;
+    if (draft.scope) c.scope = draft.scope;
     if (draft.proposal) c.proposal = draft.proposal;
     d.comments.push(c); dbWrite(d);
     return c;
@@ -376,6 +385,7 @@
     box-shadow:0 0 0 4px var(--an-fg); }
   #__an_elementbox label { display:block; margin-bottom:6px; font:700 12px var(--an-font); }
   #__an_elementbox .an-ta { width:100%; }
+  #__an_element_scope { margin-bottom:13px; }
   #__an_elementbox .an-proposal-fields { margin:0 0 13px; padding:12px;
     border:1px solid var(--an-border); border-radius:10px; background:var(--an-surface-2); }
   #__an_elementbox .an-proposal-fields[hidden] { display:none; }
@@ -1138,7 +1148,8 @@
       });
     } else if (g.kind === "pen") {
       var d = g.points.map(function (p, i) {
-        return (i ? "L" : "M") + (box.x + p[0] * box.w).toFixed(1) + " " + (box.y + p[1] * box.h).toFixed(1);
+        var move = !i || Array.isArray(g.breaks) && g.breaks.indexOf(i) >= 0;
+        return (move ? "M" : "L") + (box.x + p[0] * box.w).toFixed(1) + " " + (box.y + p[1] * box.h).toFixed(1);
       }).join(" ");
       node = svgEl("path", {
         d: d, fill: "none", stroke: c.color, "stroke-width": 3,
@@ -1357,6 +1368,18 @@
   });
 
   var drawing = null;
+  function clearDrawing() {
+    if (drawing && drawing.node && drawing.node.parentNode) drawing.node.parentNode.removeChild(drawing.node);
+    drawing = null;
+  }
+  function finishPen(d, clientX, clientY) {
+    clearDrawing();
+    var geom = { kind: "pen", selector: cssPath(d.anchorEl),
+      points: d.points.map(function (p) { return [(p[0] - d.box.x) / d.box.w, (p[1] - d.box.y) / d.box.h]; }),
+      vw: window.innerWidth, vh: window.innerHeight };
+    if (d.breaks.length) geom.breaks = d.breaks.slice();
+    openComposer(clientX + 6, clientY + 6, { type: "pen", color: state.color, geom: geom });
+  }
   function onDown(e) {
     if (!state.enabled) return;
     if (e.button !== 0 && e.pointerType === "mouse") return;
@@ -1377,10 +1400,20 @@
     if (t === "rect" || t === "circle" || t === "pen") {
       e.preventDefault();
       ensureOverlay();
+      if (t === "pen" && drawing && drawing.paused) {
+        drawing.paused = false;
+        drawing.strokeStart = drawing.points.length;
+        drawing.breaks.push(drawing.strokeStart);
+        drawing.points.push([e.pageX, e.pageY]);
+        drawing.startX = e.pageX;
+        drawing.startY = e.pageY;
+        return;
+      }
       var anchor = pickAnchor(e.target);
       drawing = {
         tool: t, anchorEl: anchor, box: docBox(anchor),
         startX: e.pageX, startY: e.pageY, points: [[e.pageX, e.pageY]], node: null,
+        breaks: [], strokeStart: 0, paused: false,
       };
       // Capture pointer so pointermove/pointerup are reliably delivered during touch drawing
       if (e.pointerId != null && overlay && overlay.setPointerCapture)
@@ -1388,7 +1421,7 @@
     }
   }
   function onMove(e) {
-    if (!drawing) return;
+    if (!drawing || drawing.paused) return;
     e.preventDefault();
     var d = drawing;
     if (d.node) overlay.removeChild(d.node);
@@ -1404,7 +1437,9 @@
         stroke: state.color, "stroke-width": 2.5 });
     } else if (d.tool === "pen") {
       addPenPoint(d, e.pageX, e.pageY);
-      var dd = d.points.map(function (p, i) { return (i ? "L" : "M") + p[0] + " " + p[1]; }).join(" ");
+      var dd = d.points.map(function (p, i) {
+        return (!i || d.breaks.indexOf(i) >= 0 ? "M" : "L") + p[0] + " " + p[1];
+      }).join(" ");
       d.node = svgEl("path", { d: dd, fill: "none", stroke: state.color,
         "stroke-width": 3, "stroke-linecap": "round", "stroke-linejoin": "round" });
     }
@@ -1416,21 +1451,26 @@
       d.points.push([x, y]);
   }
   function onUp(e) {
-    if (!drawing) return;
-    var d = drawing; drawing = null;
-    if (d.node) overlay.removeChild(d.node);
+    if (!drawing || drawing.paused) return;
+    var d = drawing;
     var box = d.box, geom;
     function clearSel() { try { window.getSelection && window.getSelection().removeAllRanges(); } catch (ex) {} }
     if (d.tool === "pen") {
       addPenPoint(d, e.pageX, e.pageY);
       var dx = e.pageX - d.startX, dy = e.pageY - d.startY;
-      if (d.points.length < 2 || Math.sqrt(dx * dx + dy * dy) < 6) {
-        clearSel(); justCancelledDraw = true; return setTool("cursor");
+      if (d.points.length - d.strokeStart < 2 || Math.sqrt(dx * dx + dy * dy) < 6) {
+        clearSel(); justCancelledDraw = true; clearDrawing(); return setTool("cursor");
       }
-      geom = { kind: "pen", selector: cssPath(d.anchorEl),
-        points: d.points.map(function (p) { return [(p[0] - box.x) / box.w, (p[1] - box.y) / box.h]; }),
-        vw: window.innerWidth, vh: window.innerHeight };
+      if (e.ctrlKey || e.metaKey) {
+        d.paused = true;
+        d.lastClientX = e.clientX;
+        d.lastClientY = e.clientY;
+        return;
+      }
+      return finishPen(d, e.clientX, e.clientY);
     } else {
+      drawing = null;
+      if (d.node) overlay.removeChild(d.node);
       var x0 = Math.min(d.startX, e.pageX), y0 = Math.min(d.startY, e.pageY);
       var w = Math.abs(e.pageX - d.startX), h = Math.abs(e.pageY - d.startY);
       if (w < 6 && h < 6) { clearSel(); justCancelledDraw = true; return setTool("cursor"); }
@@ -1438,7 +1478,7 @@
         x: (x0 - box.x) / box.w, y: (y0 - box.y) / box.h, w: w / box.w, h: h / box.h,
         vw: window.innerWidth, vh: window.innerHeight };
     }
-    openComposer(e.clientX + 6, e.clientY + 6, { type: d.tool === "pen" ? "pen" : "shape", color: state.color, geom: geom });
+    openComposer(e.clientX + 6, e.clientY + 6, { type: "shape", color: state.color, geom: geom });
   }
   var SEMANTIC_TAGS = /^(MAIN|ARTICLE|SECTION|ASIDE|HEADER|FOOTER|NAV)$/;
   var CONTAINER_CLASSES = /\b(container|wrap(?:per)?|content|layout|inner|page)\b/;
@@ -1490,11 +1530,17 @@
   function stableClasses(node) {
     return Array.prototype.slice.call(node.classList || []).filter(function (name) {
       return name.indexOf("an-") !== 0 && name.length <= 64 &&
-        !/(^|[-_])(active|current|focus|hover|open|selected)([-_]|$)/i.test(name) &&
+        !/(^|[-_])(active|current|focus|hover|open|selected|visible|shown|reveal|in)([-_]|$)/i.test(name) &&
         !/\d{5,}/.test(name);
     }).slice(0, 4);
   }
   var SEMANTIC_SELECTOR_TAGS = /^(main|article|section|aside|header|footer|nav|form|figure|figcaption|h[1-6]|p|button|a|table|ul|ol|li)$/;
+  function similarElementSelector(node) {
+    var tag = node.nodeName.toLowerCase();
+    var classes = stableClasses(node);
+    if (!classes.length && !SEMANTIC_SELECTOR_TAGS.test(tag)) return null;
+    return tag + classes.map(function (name) { return "." + CSS.escape(name); }).join("");
+  }
   function stableSelector(node) {
     if (!node || node.nodeType !== 1 || isOurs(node)) return null;
     if (node.id) {
@@ -1549,11 +1595,9 @@
   }
   function elementContext(node) {
     var r = node.getBoundingClientRect();
-    return {
-      url: location.href,
-      viewport: { width: window.innerWidth, height: window.innerHeight },
+    return commentContext({
       rect: { x: r.left, y: r.top, width: r.width, height: r.height },
-    };
+    });
   }
   function pageElementAt(x, y) {
     inspectCapture.style.display = "none";
@@ -1614,6 +1658,12 @@
     var title = el("h2", { id: "__an_element_title", text: "Classify selected element" });
     elementSummaryEl = el("div", { id: "__an_element_summary", text: inspectLabel.textContent });
     var verdicts = el("div", { class: "an-verdicts", role: "group", "aria-label": "Verdict" });
+    var similarSelector = similarElementSelector(inspectTarget);
+    var similarCount = similarSelector ? document.querySelectorAll(similarSelector).length : 0;
+    var scopeSelect = el("select", { id: "__an_element_scope", class: "an-input" }, [
+      el("option", { value: "instance", text: "This element only" }),
+      similarCount > 1 ? el("option", { value: "similar", text: "All " + similarCount + " similar elements" }) : null,
+    ]);
     var proposalFields = null, proposedText = null, proposedImage = null, proposedAlt = null;
     var proposalKids = [];
     var canEditText = canProposeText(inspectTarget);
@@ -1670,6 +1720,9 @@
           color: colors[verdict],
           geom: { kind: "block", selector: elementSelector(selectedTarget) },
           element: elementMetadata(selectedTarget),
+          scope: scopeSelect.value === "similar"
+            ? { kind: "similar", selector: similarSelector, matchCount: similarCount }
+            : { kind: "instance", selector: elementSelector(selectedTarget) },
           context: elementContext(selectedTarget),
         };
         if (verdict === "change" && proposedText) {
@@ -1705,6 +1758,8 @@
     box.appendChild(el("p", { class: "an-edesc", text: "Choose a verdict and add the reviewer note." }));
     box.appendChild(elementSummaryEl);
     box.appendChild(verdicts);
+    box.appendChild(el("label", { for: "__an_element_scope", text: "Apply to" }));
+    box.appendChild(scopeSelect);
     if (proposalFields) box.appendChild(proposalFields);
     box.appendChild(commentLabel);
     box.appendChild(comment);
@@ -1863,7 +1918,8 @@
       el("h3", { text: "Keyboard shortcuts" }),
     ]);
     [["V", "Browse"], ["I", "Inspect element"], ["H", "Highlight"], ["R", "Rectangle"], ["C", "Circle"],
-     ["D", "Freehand"], ["P", "Pin"], ["A", "Comments panel"], ["O", "Show / hide tools"],
+     ["D", "Freehand"], ["Ctrl/⌘ + release", "Add another stroke"], ["Ctrl/⌘ + Enter", "Comment / post"],
+     ["P", "Pin"], ["A", "Comments panel"], ["O", "Show / hide tools"],
      ["Esc", "Cancel"], ["?", "This card"]].forEach(function (row) {
       helpEl.appendChild(el("div", { class: "an-krow" }, [
         el("span", { text: row[1] }), el("kbd", { text: row[0] }),
@@ -1912,6 +1968,11 @@
     root.appendChild(panel);
 
     document.addEventListener("keydown", function (e) {
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && drawing && drawing.tool === "pen" && drawing.paused) {
+        e.preventDefault();
+        finishPen(drawing, drawing.lastClientX, drawing.lastClientY);
+        return;
+      }
       if (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.nodeName)) return;
       if (e.target && e.target.isContentEditable) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -2099,6 +2160,7 @@
 
   function setTool(t) {
     if (state.tool === "inspect" && t !== "inspect") stopInspector();
+    if (drawing && drawing.tool === "pen" && t !== "pen") clearDrawing();
     state.tool = t;
     bar.querySelectorAll(".an-btn[data-tool]").forEach(function (b) {
       b.classList.toggle("an-on", b.getAttribute("data-tool") === t);
@@ -2109,7 +2171,7 @@
     var hints = { inspect: "Hover an element, then click to classify it",
       highlight: "Select any text to highlight & comment",
       rect: "Drag to draw a rectangle", circle: "Drag to draw a circle",
-      pen: "Draw freehand — release to comment", pin: "Click anywhere to drop a pin" };
+      pen: "Draw freehand — hold Ctrl/⌘ on release for another stroke", pin: "Click anywhere to drop a pin" };
     if (hints[t]) showHint(hints[t]); else hideHint();
   }
   function showHint(txt) {
@@ -2380,7 +2442,10 @@
       return typeof g.x === "number" && isFinite(g.x) && typeof g.y === "number" && isFinite(g.y);
     if (g.kind === "pen")
       return Array.isArray(g.points) && g.points.length >= 2 && g.points.length <= 10000 &&
-        g.points.every(function (p) { return Array.isArray(p) && p.length === 2 && isFinite(p[0]) && isFinite(p[1]); });
+        g.points.every(function (p) { return Array.isArray(p) && p.length === 2 && isFinite(p[0]) && isFinite(p[1]); }) &&
+        (g.breaks == null || Array.isArray(g.breaks) && g.breaks.every(function (index, i) {
+          return Number.isInteger(index) && index > 0 && index < g.points.length && (!i || index > g.breaks[i - 1]);
+        }));
     if (g.kind === "block") return typeof g.selector === "string" && g.selector.length < 4096;
     return true;
   }

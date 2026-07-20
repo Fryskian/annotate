@@ -73,10 +73,12 @@
         event.preventDefault();
         submit.disabled = true;
         status.textContent = "Submitting…";
+        var headers = { "Content-Type": "application/json" };
+        headers[wp.nonceHeader || "X-WP-Nonce"] = wp.nonce;
         fetch(wp.restUrl, {
           method: "POST",
           credentials: "same-origin",
-          headers: { "Content-Type": "application/json", "X-WP-Nonce": wp.nonce },
+          headers: headers,
           body: JSON.stringify({
             reviewer: { name: name.value.trim(), email: email.value.trim() },
             message: message.value.trim(),

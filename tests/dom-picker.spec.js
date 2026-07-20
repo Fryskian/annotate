@@ -99,6 +99,24 @@ test('saves a Change verdict in red', async ({ page }) => {
   });
 });
 
+test('records when a decision applies to all similar elements', async ({ page }) => {
+  await page.locator('[data-tool="inspect"]').click();
+  const target = page.locator('.tool-card').first();
+  await target.scrollIntoViewIfNeeded();
+  const box = await target.boundingBox();
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  await page.getByRole('button', { name: 'Select div.tool-card' }).click();
+  await page.getByLabel('Apply to').selectOption('similar');
+  await page.getByRole('textbox', { name: 'Comment', exact: true }).fill('Use this decision for every tool card.');
+  await page.getByRole('button', { name: 'Save annotation' }).click();
+
+  expect(await page.evaluate(() => window.Annotate.comments()[0].scope)).toEqual({
+    kind: 'similar',
+    selector: 'div.tool-card',
+    matchCount: 6,
+  });
+});
+
 test('saves a Question verdict in amber', async ({ page }) => {
   await page.locator('[data-tool="inspect"]').click();
   const target = page.locator('header.hero h1');
