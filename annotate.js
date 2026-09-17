@@ -59,6 +59,13 @@
     uploadAttachment: typeof globalConfig.uploadAttachment === "function" ? globalConfig.uploadAttachment : null,
     submitReview: typeof globalConfig.submitReview === "function" ? globalConfig.submitReview : null,
   };
+  function tr(message, values) {
+    var translations = globalConfig.translations || {};
+    var result = Object.prototype.hasOwnProperty.call(translations, message) ? translations[message] : message;
+    return String(result).replace(/\{(\w+)\}/g, function (match, key) {
+      return values && Object.prototype.hasOwnProperty.call(values, key) ? String(values[key]) : match;
+    });
+  }
   var PAGE = (CFG.project ? CFG.project + ":" : "") + CFG.page;
 
   // localStorage can be denied (private mode, sandboxed iframes) — never crash
@@ -67,16 +74,16 @@
     set: function (k, v) {
       try { localStorage.setItem(k, v); } catch (e) {
         if (e && (e.name === "QuotaExceededError" || e.name === "NS_ERROR_DOM_QUOTA_REACHED"))
-          setTimeout(function () { toast("Storage full — export your comments before adding more.", { kind: "error", duration: 8000 }); }, 0);
+          setTimeout(function () { toast(tr("Storage full — export your comments before adding more."), { kind: "error", duration: 8000 }); }, 0);
       }
     },
   };
   var COLORS = [
-    { name: "Amber", hex: "#f59e0b" },
-    { name: "Rose", hex: "#f43f5e" },
-    { name: "Violet", hex: "#8b5cf6" },
-    { name: "Sky", hex: "#0ea5e9" },
-    { name: "Emerald", hex: "#10b981" },
+    { name: tr("Amber"), hex: "#f59e0b" },
+    { name: tr("Rose"), hex: "#f43f5e" },
+    { name: tr("Violet"), hex: "#8b5cf6" },
+    { name: tr("Sky"), hex: "#0ea5e9" },
+    { name: tr("Emerald"), hex: "#10b981" },
   ];
 
   var state = {
@@ -126,10 +133,10 @@
   }
   function fmtTime(iso) {
     var d = new Date(iso), now = Date.now(), diff = (now - d) / 1000;
-    if (diff < 60) return "just now";
-    if (diff < 3600) return Math.floor(diff / 60) + "m ago";
-    if (diff < 86400) return Math.floor(diff / 3600) + "h ago";
-    return d.toLocaleDateString();
+    if (diff < 60) return tr("just now");
+    if (diff < 3600) return Math.floor(diff / 60) + tr("m ago");
+    if (diff < 86400) return Math.floor(diff / 3600) + tr("h ago");
+    return d.toLocaleDateString(globalConfig.locale || undefined);
   }
   function initials(name) {
     var p = String(name || "?").trim().split(/\s+/);
@@ -190,7 +197,7 @@
       page: PAGE,
       url: location.href,
       type: draft.type || "note",
-      author: state.author || "Anonymous",
+      author: state.author || tr("Anonymous"),
       text: String(draft.text || "").slice(0, 5000),
       color: draft.color || state.color,
       anchor: draft.anchor || null,
@@ -1178,7 +1185,7 @@
     txt.textContent = viewportMismatch(g) ? "⚠" : idx;
     if (viewportMismatch(g)) {
       var badgeTitle = svgEl("title");
-      badgeTitle.textContent = "Drawn at " + g.vw + "px wide — positions may differ on this viewport";
+      badgeTitle.textContent = tr("Drawn at ") + g.vw + tr("px wide — positions may differ on this viewport");
       badge.appendChild(badgeTitle);
     }
     badge.appendChild(circ); badge.appendChild(txt);
@@ -1221,10 +1228,10 @@
     ensureComposer();
     composerShownAt = performance.now();
     pendingDraft = draft;
-    var label = { highlight: "Highlight", shape: draft.geom && draft.geom.kind === "circle" ? "Circle" : "Rectangle", pin: "Pin", pen: "Sketch", block: "Section" }[draft.type] || "Note";
+    var label = { highlight: tr("Highlight"), shape: draft.geom && draft.geom.kind === "circle" ? tr("Circle") : tr("Rectangle"), pin: tr("Pin"), pen: tr("Sketch"), block: tr("Section") }[draft.type] || tr("Note");
     composer.innerHTML = "";
     composer.appendChild(el("div", { class: "an-ctitle" }, [
-      swatchDot(draft.color), document.createTextNode(label + " comment"),
+      swatchDot(draft.color), document.createTextNode(tr("{tool} comment", { tool: label })),
       state.author ? (function () {
         var w = el("span", { style: "margin-left:auto" });
         w.appendChild(avatarEl(state.author, 20));
@@ -1233,14 +1240,14 @@
     ]));
     if (draft.anchor && draft.anchor.exact)
       composer.appendChild(el("div", { class: "an-cquote", text: draft.anchor.exact }));
-    var ta = el("textarea", { class: "an-ta", rows: "3", placeholder: "Write your review…" });
+    var ta = el("textarea", { class: "an-ta", rows: "3", placeholder: tr("Write your review…") });
     composer.appendChild(ta);
-    var save = el("button", { class: "an-primary", text: "Comment" });
-    var cancel = el("button", { class: "an-ghost", text: "Cancel" });
+    var save = el("button", { class: "an-primary", text: tr("Comment") });
+    var cancel = el("button", { class: "an-ghost", text: tr("Cancel") });
     var plat = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || navigator.userAgent || "";
     var isMac = /Mac|iPhone|iPad/i.test(plat);
     composer.appendChild(el("div", { class: "an-cfoot" }, [
-      el("span", { class: "an-ckbd", text: (isMac ? "⌘" : "Ctrl") + "↵ to post" }),
+      el("span", { class: "an-ckbd", text: (isMac ? "⌘" : "Ctrl") + tr("↵ to post") }),
       cancel, save,
     ]));
     save.addEventListener("click", function () {
@@ -1275,17 +1282,17 @@
   function askName(onDone) {
     if (document.getElementById("__an_namewrap")) return;
     var wrap = el("div", { id: "__an_namewrap" });
-    var input = el("input", { placeholder: "e.g. Jane Doe", value: state.author || "" });
-    var btn = el("button", { text: "Start reviewing" });
+    var input = el("input", { placeholder: tr("e.g. Jane Doe"), value: state.author || "" });
+    var btn = el("button", { text: tr("Start reviewing") });
     var kids = [
-      el("h3", { class: "an-nt", text: "Please provide your name" }),
-      el("p", { class: "an-nd", text: "Your name appears on every comment so collaborators know who said what. Saved on this device — you won't be asked again." }),
+      el("h3", { class: "an-nt", text: tr("Please provide your name") }),
+      el("p", { class: "an-nd", text: tr("Your name appears on every comment so collaborators know who said what. Saved on this device — you won't be asked again.") }),
     ];
     // Surface the author's note (data-note) up front so the reviewer knows
     // what to focus on before they start.
     if (state.note) {
       kids.push(el("div", { class: "an-nnote" }, [
-        el("span", { class: "an-nlbl", text: "What to review" }),
+        el("span", { class: "an-nlbl", text: tr("What to review") }),
         el("span", { text: state.note }),
       ]));
     }
@@ -1295,7 +1302,7 @@
     document.body.appendChild(wrap);
     var releaseTrap = trapFocus(wrap);
     function done() {
-      state.author = input.value.trim() || "Anonymous";
+      state.author = input.value.trim() || tr("Anonymous");
       store.set("an-author", state.author);
       releaseTrap();
       wrap.remove();
@@ -1629,7 +1636,7 @@
       if (index) inspectCrumbs.appendChild(el("span", { text: "›" }));
       var crumb = el("button", {
         type: "button", class: index === inspectIndex ? "an-selected" : "", text: elementSummary(part),
-        "aria-label": "Select " + elementSummary(part),
+        "aria-label": tr("Select ") + elementSummary(part),
       });
       crumb.addEventListener("click", function (e) {
         e.stopPropagation();
@@ -1658,14 +1665,14 @@
     inspectReturnFocus = document.activeElement;
     elementWrap = el("div", { id: "__an_elementwrap" });
     var box = el("div", { id: "__an_elementbox", role: "dialog", "aria-modal": "true", "aria-labelledby": "__an_element_title" });
-    var title = el("h2", { id: "__an_element_title", text: "Classify selected element" });
+    var title = el("h2", { id: "__an_element_title", text: tr("Classify selected element") });
     elementSummaryEl = el("div", { id: "__an_element_summary", text: inspectLabel.textContent });
-    var verdicts = el("div", { class: "an-verdicts", role: "group", "aria-label": "Verdict" });
+    var verdicts = el("div", { class: "an-verdicts", role: "group", "aria-label": tr("Verdict") });
     var similarSelector = similarElementSelector(inspectTarget);
     var similarCount = similarSelector ? document.querySelectorAll(similarSelector).length : 0;
     var scopeSelect = el("select", { id: "__an_element_scope", class: "an-input" }, [
-      el("option", { value: "instance", text: "This element only" }),
-      similarCount > 1 ? el("option", { value: "similar", text: "All " + similarCount + " similar elements" }) : null,
+      el("option", { value: "instance", text: tr("This element only") }),
+      similarCount > 1 ? el("option", { value: "similar", text: tr("All ") + similarCount + tr(" similar elements") }) : null,
     ]);
     var proposalFields = null, proposedText = null, proposedImage = null, proposedAlt = null;
     var proposalKids = [];
@@ -1674,20 +1681,20 @@
       proposedText = el("textarea", { id: "__an_proposed_text", class: "an-ta", rows: "3", maxlength: "5000" });
       proposedText.value = String(inspectTarget.innerText || inspectTarget.textContent || "").replace(/\s+/g, " ").trim();
       proposalKids = proposalKids.concat([
-        el("label", { for: "__an_proposed_text", text: "Proposed text" }),
+        el("label", { for: "__an_proposed_text", text: tr("Proposed text") }),
         proposedText,
       ]);
     }
     if (CFG.contentEditing && CFG.uploadAttachment) {
       proposedImage = el("input", { id: "__an_proposed_image", class: "an-input", type: "file", accept: "image/jpeg,image/png,image/gif,image/webp,image/avif" });
-      proposedAlt = el("input", { id: "__an_proposed_alt", class: "an-input", type: "text", maxlength: "500", placeholder: "Describe the image for visitors" });
+      proposedAlt = el("input", { id: "__an_proposed_alt", class: "an-input", type: "text", maxlength: "500", placeholder: tr("Describe the image for visitors") });
       proposalKids = proposalKids.concat([
-        el("label", { for: "__an_proposed_image", text: "Proposed image" }), proposedImage,
-        el("label", { for: "__an_proposed_alt", text: "Image description" }), proposedAlt,
+        el("label", { for: "__an_proposed_image", text: tr("Proposed image") }), proposedImage,
+        el("label", { for: "__an_proposed_alt", text: tr("Image description") }), proposedAlt,
       ]);
     }
     if (proposalKids.length) proposalFields = el("div", { class: "an-proposal-fields", hidden: "" }, proposalKids);
-    [["keep", "Keep"], ["change", "Change"], ["question", "Question"]].forEach(function (item, index) {
+    [["keep", tr("Keep")], ["change", tr("Change")], ["question", tr("Question")]].forEach(function (item, index) {
       var verdict = el("button", { type: "button", class: "an-verdict", "data-verdict": item[0],
         "aria-pressed": index === 0 ? "true" : "false", text: item[1] });
       verdict.addEventListener("click", function () {
@@ -1697,10 +1704,10 @@
       });
       verdicts.appendChild(verdict);
     });
-    var commentLabel = el("label", { for: "__an_element_comment", text: "Comment" });
-    var comment = el("textarea", { id: "__an_element_comment", class: "an-ta", rows: "4", required: "", placeholder: "Explain this decision…" });
-    var cancel = el("button", { type: "button", class: "an-ghost", text: "Cancel" });
-    var save = el("button", { type: "button", class: "an-primary", text: "Save annotation" });
+    var commentLabel = el("label", { for: "__an_element_comment", text: tr("Comment") });
+    var comment = el("textarea", { id: "__an_element_comment", class: "an-ta", rows: "4", required: "", placeholder: tr("Explain this decision…") });
+    var cancel = el("button", { type: "button", class: "an-ghost", text: tr("Cancel") });
+    var save = el("button", { type: "button", class: "an-primary", text: tr("Save annotation") });
     cancel.addEventListener("click", function () { setTool("cursor"); });
     save.addEventListener("click", function () {
       if (!comment.value.trim()) { comment.reportValidity(); return; }
@@ -1710,7 +1717,7 @@
       var colors = { keep: "#10b981", change: "#ef4444", question: "#f59e0b" };
       var file = verdict === "change" && proposedImage && proposedImage.files && proposedImage.files[0];
       if (file && (!/^image\//.test(file.type) || file.size > 10 * 1024 * 1024)) {
-        toast("Choose a supported image smaller than 10 MB", { kind: "error" });
+        toast(tr("Choose a supported image smaller than 10 MB"), { kind: "error" });
         return;
       }
       if (file && !proposedAlt.value.trim()) { proposedAlt.required = true; proposedAlt.reportValidity(); return; }
@@ -1746,22 +1753,22 @@
 
       if (!file) { finish(null); return; }
       save.disabled = true;
-      save.textContent = "Uploading…";
+      save.textContent = tr("Uploading…");
       Promise.resolve().then(function () { return CFG.uploadAttachment(file); }).then(function (attachment) {
-        if (!attachment || !safeHttpUrl(attachment.url)) throw new Error("Upload returned no image URL");
+        if (!attachment || !safeHttpUrl(attachment.url)) throw new Error(tr("Upload returned no image URL"));
         if (!save.isConnected || !selectedTarget.isConnected) return;
         finish(attachment);
       }).catch(function () {
         save.disabled = false;
-        save.textContent = "Save annotation";
-        toast("Image upload failed — your annotation was not saved", { kind: "error", duration: 7000 });
+        save.textContent = tr("Save annotation");
+        toast(tr("Image upload failed — your annotation was not saved"), { kind: "error", duration: 7000 });
       });
     });
     box.appendChild(title);
-    box.appendChild(el("p", { class: "an-edesc", text: "Choose a verdict and add the reviewer note." }));
+    box.appendChild(el("p", { class: "an-edesc", text: tr("Choose a verdict and add the reviewer note.") }));
     box.appendChild(elementSummaryEl);
     box.appendChild(verdicts);
-    box.appendChild(el("label", { for: "__an_element_scope", text: "Apply to" }));
+    box.appendChild(el("label", { for: "__an_element_scope", text: tr("Apply to") }));
     box.appendChild(scopeSelect);
     if (proposalFields) box.appendChild(proposalFields);
     box.appendChild(commentLabel);
@@ -1795,7 +1802,7 @@
     inspectCapture = el("div", { id: "__an_inspect_capture", "aria-hidden": "true" });
     inspectOverlay = el("div", { id: "__an_inspect_overlay", hidden: "" });
     inspectLabel = el("div", { id: "__an_inspect_label", hidden: "" });
-    inspectCrumbs = el("nav", { id: "__an_inspect_crumbs", "aria-label": "Element ancestry" });
+    inspectCrumbs = el("nav", { id: "__an_inspect_crumbs", "aria-label": tr("Element ancestry") });
     document.body.appendChild(inspectCapture);
     document.body.appendChild(inspectOverlay);
     document.body.appendChild(inspectLabel);
@@ -1857,9 +1864,9 @@
 
     bar = el("div", { id: "__an_bar", class: SIDE });
     var tools = [
-      ["cursor", "Browse", "V"], ["inspect", "Inspect element", "I"], ["highlight", "Highlight text", "H"],
-      ["rect", "Rectangle", "R"], ["circle", "Circle", "C"],
-      ["pen", "Freehand", "D"], ["pin", "Pin", "P"],
+      ["cursor", tr("Browse"), "V"], ["inspect", tr("Inspect element"), "I"], ["highlight", tr("Highlight text"), "H"],
+      ["rect", tr("Rectangle"), "R"], ["circle", tr("Circle"), "C"],
+      ["pen", tr("Freehand"), "D"], ["pin", tr("Pin"), "P"],
     ];
     tools.forEach(function (t) {
       var tip = t[1] + "  ·  " + t[2];
@@ -1872,7 +1879,7 @@
     });
     bar.appendChild(el("div", { class: "an-sep" }));
 
-    var colorBtn = el("button", { id: "__an_colorbtn", "data-tip": "Color", title: "Color", "aria-label": "Color" });
+    var colorBtn = el("button", { id: "__an_colorbtn", "data-tip": tr("Color"), title: tr("Color"), "aria-label": tr("Color") });
     var colorDot = el("span", { class: "an-swdot" });
     colorDot.style.background = state.color;
     colorBtn.appendChild(colorDot);
@@ -1896,18 +1903,18 @@
     bar.appendChild(colorBtn);
     bar.appendChild(el("div", { class: "an-sep" }));
 
-    var listBtn = el("button", { class: "an-btn", "data-tip": "Comments  ·  A", title: "Comments  ·  A", "aria-label": "Comments", html: ICONS.list });
+    var listBtn = el("button", { class: "an-btn", "data-tip": tr("Comments  ·  A"), title: tr("Comments  ·  A"), "aria-label": tr("Comments"), html: ICONS.list });
     countBadge = el("span", { class: "an-count" }); countBadge.style.display = "none";
     listBtn.appendChild(countBadge);
     listBtn.addEventListener("click", togglePanel);
     bar.appendChild(listBtn);
 
-    var offBtn = el("button", { class: "an-btn", "data-tip": "Hide review tools  ·  O", title: "Hide review tools  ·  O", "aria-label": "Hide review tools", html: ICONS.hide });
+    var offBtn = el("button", { class: "an-btn", "data-tip": tr("Hide review tools  ·  O"), title: tr("Hide review tools  ·  O"), "aria-label": tr("Hide review tools"), html: ICONS.hide });
     offBtn.addEventListener("click", function () { setEnabled(false); });
     bar.appendChild(offBtn);
     root.appendChild(bar);
 
-    launchEl = el("button", { id: "__an_launch", class: SIDE, html: ICONS.bubble + "<span>Review</span>" });
+    launchEl = el("button", { id: "__an_launch", class: SIDE, html: ICONS.bubble + tr("<span>Review</span>") });
     launchEl.addEventListener("click", function () {
       if (!state.author) askName(function () { setEnabled(true); });
       else setEnabled(true);
@@ -1918,12 +1925,12 @@
     root.appendChild(hintEl);
 
     helpEl = el("div", { id: "__an_help", class: SIDE }, [
-      el("h3", { text: "Keyboard shortcuts" }),
+      el("h3", { text: tr("Keyboard shortcuts") }),
     ]);
-    [["V", "Browse"], ["I", "Inspect element"], ["H", "Highlight"], ["R", "Rectangle"], ["C", "Circle"],
-     ["D", "Freehand"], ["Ctrl/⌘ + release", "Add another stroke"], ["Ctrl/⌘ + Enter", "Comment / post"],
-     ["P", "Pin"], ["A", "Comments panel"], ["O", "Show / hide tools"],
-     ["Esc", "Cancel"], ["?", "This card"]].forEach(function (row) {
+    [["V", tr("Browse")], ["I", tr("Inspect element")], ["H", tr("Highlight")], ["R", tr("Rectangle")], ["C", tr("Circle")],
+     ["D", tr("Freehand")], [tr("Ctrl/⌘ + release"), tr("Add another stroke")], ["Ctrl/⌘ + Enter", tr("Comment / post")],
+     ["P", tr("Pin")], ["A", tr("Comments panel")], ["O", tr("Show / hide tools")],
+     ["Esc", tr("Cancel")], ["?", tr("This card")]].forEach(function (row) {
       helpEl.appendChild(el("div", { class: "an-krow" }, [
         el("span", { text: row[1] }), el("kbd", { text: row[0] }),
       ]));
@@ -1932,23 +1939,23 @@
 
     panel = el("div", { id: "__an_panel" });
     var header = el("div", { class: "an-ph" }, [
-      el("h2", { text: "Comments" }),
+      el("h2", { text: tr("Comments") }),
       el("span", { class: "an-pcount", id: "__an_sub", text: "0" }),
-      el("button", { class: "an-hbtn", html: ICONS.upload, title: "Import comments from a JSON file", "aria-label": "Import comments from a JSON file", onclick: function (e) { e.stopPropagation(); pickImportFile(); } }),
-      el("button", { class: "an-hbtn", html: ICONS.download, title: "Download comments as JSON", "aria-label": "Download comments as JSON", onclick: function (e) { e.stopPropagation(); exportComments(); } }),
-      el("button", { class: "an-x", html: "&times;", "aria-label": "Close comments panel", onclick: closePanel }),
+      el("button", { class: "an-hbtn", html: ICONS.upload, title: tr("Import comments from a JSON file"), "aria-label": tr("Import comments from a JSON file"), onclick: function (e) { e.stopPropagation(); pickImportFile(); } }),
+      el("button", { class: "an-hbtn", html: ICONS.download, title: tr("Download comments as JSON"), "aria-label": tr("Download comments as JSON"), onclick: function (e) { e.stopPropagation(); exportComments(); } }),
+      el("button", { class: "an-x", html: "&times;", "aria-label": tr("Close comments panel"), onclick: closePanel }),
     ]);
     var search = el("div", { class: "an-search" }, [
       (function () { var s = el("span", { html: ICONS.search }); return s.firstChild; })(),
     ]);
-    var searchInput = el("input", { placeholder: "Search comments…" });
+    var searchInput = el("input", { placeholder: tr("Search comments…") });
     searchInput.addEventListener("input", function () {
       state.query = searchInput.value.toLowerCase();
       renderPanel();
     });
     search.appendChild(searchInput);
     var filters = el("div", { class: "an-filters" });
-    [["open", "Open"], ["resolved", "Resolved"], ["all", "All"]].forEach(function (f) {
+    [["open", tr("Open")], ["resolved", tr("Resolved")], ["all", tr("All")]].forEach(function (f) {
       var ch = el("span", { class: "an-chip" + (state.filter === f[0] ? " an-on" : ""), "data-f": f[0], text: f[1] });
       ch.addEventListener("click", function () {
         state.filter = f[0];
@@ -2046,7 +2053,7 @@
     return null;
   }
   function setupBlockPlus() {
-    plusBtn = el("div", { id: "__an_plus", title: "Comment on this section",
+    plusBtn = el("div", { id: "__an_plus", title: tr("Comment on this section"),
       html: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 6v12M6 12h12"/></svg>' });
     document.body.appendChild(plusBtn);
     plusBtn.addEventListener("click", function (e) {
@@ -2155,7 +2162,7 @@
       if (root) root.style.display = "none";
       if (launchEl) {
         var n = state.comments.filter(function (c) { return !c.resolved; }).length;
-        launchEl.querySelector("span").textContent = n ? "Review (" + n + ")" : "Review";
+        launchEl.querySelector("span").textContent = n ? tr("Review (") + n + ")" : tr("Review");
         launchEl.classList.add("an-show");
       }
     }
@@ -2171,17 +2178,17 @@
     if (t === "inspect") startInspector();
     var drawingTool = t === "rect" || t === "circle" || t === "pen" || t === "pin";
     document.body.classList.toggle("an-drawing", drawingTool);
-    var hints = { inspect: "Hover an element, then click to classify it",
-      highlight: "Select any text to highlight & comment",
-      rect: "Drag to draw a rectangle", circle: "Drag to draw a circle",
-      pen: "Draw freehand — hold Ctrl/⌘ on release for another stroke", pin: "Click anywhere to drop a pin" };
+    var hints = { inspect: tr("Hover an element, then click to classify it"),
+      highlight: tr("Select any text to highlight & comment"),
+      rect: tr("Drag to draw a rectangle"), circle: tr("Drag to draw a circle"),
+      pen: tr("Draw freehand — hold Ctrl/⌘ on release for another stroke"), pin: tr("Click anywhere to drop a pin") };
     if (hints[t]) showHint(hints[t]); else hideHint();
   }
   function showHint(txt) {
     hintEl.innerHTML = "";
     hintEl.appendChild(document.createTextNode(txt + " "));
     hintEl.appendChild(el("kbd", { text: "Esc" }));
-    hintEl.appendChild(document.createTextNode(" to cancel"));
+    hintEl.appendChild(document.createTextNode(tr(" to cancel")));
     hintEl.classList.add("an-show");
   }
   function hideHint() { hintEl.classList.remove("an-show"); }
@@ -2234,7 +2241,7 @@
     if (sub) sub.textContent = String(state.comments.length);
   }
 
-  var TYPE_LABEL = { highlight: "Highlight", shape: "Shape", pin: "Pin", pen: "Sketch", note: "Note", block: "Section", element: "Element" };
+  var TYPE_LABEL = { highlight: tr("Highlight"), shape: tr("Shape"), pin: tr("Pin"), pen: tr("Sketch"), note: tr("Note"), block: tr("Section"), element: tr("Element") };
   function visibleComments() {
     return state.comments.filter(function (c) {
       if (state.filter === "open" && c.resolved) return false;
@@ -2255,10 +2262,10 @@
     var list = visibleComments();
     if (!list.length) {
       var msg = state.query
-        ? "No comments match “" + esc(state.query) + "”."
+        ? tr("No comments match “") + esc(state.query) + "”."
         : state.filter === "resolved"
-          ? "Nothing resolved yet."
-          : "No comments yet.<br>Select any text, or pick a tool from the toolbar — try <kbd>H</kbd> highlight or <kbd>P</kbd> pin.";
+          ? tr("Nothing resolved yet.")
+          : tr("No comments yet.<br>Select any text, or pick a tool from the toolbar — try <kbd>H</kbd> highlight or <kbd>P</kbd> pin.");
       listEl.appendChild(el("div", { class: "an-empty" }, [
         el("div", { class: "an-eicon", html: ICONS.bubble }),
         el("div", { html: msg }),
@@ -2272,12 +2279,12 @@
       var card = el("div", { class: "an-card" + (c.id === state.activeId ? " an-active" : "") + (c.resolved ? " an-resolved" : ""), "data-id": c.id });
       var meta = el("div", { class: "an-cmeta" }, [
         avatarEl(c.author),
-        el("span", { class: "an-author", text: c.author || "Anonymous" }),
+        el("span", { class: "an-author", text: c.author || tr("Anonymous") }),
         el("span", { class: "an-tag" }, [
           (function(){ var d = el("span",{class:"an-dot"}); d.style.background=c.color; return d; })(),
           document.createTextNode("#" + idx + " " + (TYPE_LABEL[c.type] || c.type)),
         ]),
-        c.resolved ? el("span", { class: "an-rbadge", html: ICONS.check + "<span>Resolved</span>" }) : null,
+        c.resolved ? el("span", { class: "an-rbadge", html: ICONS.check + tr("<span>Resolved</span>") }) : null,
         el("span", { class: "an-when", text: fmtTime(c.createdAt) }),
       ]);
       card.appendChild(meta);
@@ -2299,7 +2306,7 @@
           ]);
           if (r.author === state.author) {
             var rAct = el("span", { style: "display:flex;gap:4px;flex:none;margin-left:6px" });
-            var rDel = el("button", { class: "an-mini an-danger", html: ICONS.trash, title: "Delete reply" });
+            var rDel = el("button", { class: "an-mini an-danger", html: ICONS.trash, title: tr("Delete reply") });
             rDel.addEventListener("click", function (e) {
               e.stopPropagation();
               var updated = patchComment(c.id, { deleteReply: r.id });
@@ -2314,13 +2321,13 @@
       }
 
       var rbox = el("div", { class: "an-replybox" });
-      var rin = el("textarea", { class: "an-ta", rows: "2", placeholder: "Reply… (Ctrl+↵ to post)" });
+      var rin = el("textarea", { class: "an-ta", rows: "2", placeholder: tr("Reply… (Ctrl+↵ to post)") });
       rbox.appendChild(rin);
-      var rsend = el("button", { class: "an-primary", style: "margin-top:6px;align-self:flex-end", text: "Reply" });
+      var rsend = el("button", { class: "an-primary", style: "margin-top:6px;align-self:flex-end", text: tr("Reply") });
       rbox.appendChild(rsend);
       function submitReply() {
         if (!rin.value.trim()) return;
-        var reply = { id: uid(), author: state.author || "Anonymous", text: rin.value.trim(), createdAt: new Date().toISOString() };
+        var reply = { id: uid(), author: state.author || tr("Anonymous"), text: rin.value.trim(), createdAt: new Date().toISOString() };
         var updated = patchComment(c.id, { reply: reply });
         if (updated) { rin.value = ""; mergeComment(updated); renderPanel(); }
       }
@@ -2333,7 +2340,7 @@
 
       var ebox = el("div", { class: "an-editbox" });
       var eta = el("textarea", { class: "an-ta", rows: "2" });
-      var esave = el("button", { class: "an-primary", text: "Save" });
+      var esave = el("button", { class: "an-primary", text: tr("Save") });
       ebox.appendChild(eta);
       ebox.appendChild(el("div", { style: "display:flex;justify-content:flex-end" }, [esave]));
       eta.addEventListener("keydown", function (e) {
@@ -2348,24 +2355,24 @@
       card.appendChild(ebox);
 
       var act = el("div", { class: "an-cact" }, [
-        el("button", { class: "an-mini", html: ICONS.reply + "<span>Reply</span>", onclick: function (e) {
+        el("button", { class: "an-mini", html: ICONS.reply + tr("<span>Reply</span>"), onclick: function (e) {
           e.stopPropagation(); rbox.classList.toggle("an-show"); rin.focus();
         } }),
-        el("button", { class: "an-mini", html: (c.resolved ? "" : ICONS.check) + "<span>" + (c.resolved ? "Reopen" : "Resolve") + "</span>", onclick: function (e) {
+        el("button", { class: "an-mini", html: (c.resolved ? "" : ICONS.check) + "<span>" + (c.resolved ? tr("Reopen") : tr("Resolve")) + "</span>", onclick: function (e) {
           e.stopPropagation();
           var updated = patchComment(c.id, { resolved: !c.resolved });
           if (updated) { mergeComment(updated); renderAll(); renderPanel(); }
         } }),
-        c.author === state.author ? el("button", { class: "an-mini", html: ICONS.edit + "<span>Edit</span>", onclick: function (e) {
+        c.author === state.author ? el("button", { class: "an-mini", html: ICONS.edit + tr("<span>Edit</span>"), onclick: function (e) {
           e.stopPropagation();
           eta.value = c.text || "";
           ebox.classList.toggle("an-show");
           eta.focus();
         } }) : null,
-        el("button", { class: "an-mini", html: ICONS.link, title: "Copy link to this comment", onclick: function (e) {
+        el("button", { class: "an-mini", html: ICONS.link, title: tr("Copy link to this comment"), onclick: function (e) {
           e.stopPropagation(); copyLink(c.id);
         } }),
-        el("button", { class: "an-mini an-danger", html: ICONS.trash, title: "Delete", onclick: function (e) {
+        el("button", { class: "an-mini an-danger", html: ICONS.trash, title: tr("Delete"), onclick: function (e) {
           e.stopPropagation(); deleteComment(c);
         } }),
       ]);
@@ -2409,13 +2416,13 @@
     var payload = reviewPayload();
     var comments = payload.comments;
     if (!comments.length) {
-      toast("No comments on this page to export", { kind: "info" });
+      toast(tr("No comments on this page to export"), { kind: "info" });
       return;
     }
     var slug = (PAGE || "page").replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "").slice(0, 60) || "page";
     var stamp = new Date().toISOString().slice(0, 10);
     downloadJSON(payload, "annotate-" + slug + "-" + stamp + ".json");
-    toast("Exported " + comments.length + " comment" + (comments.length === 1 ? "" : "s"), { kind: "success" });
+    toast(tr(comments.length === 1 ? "Exported {count} comment" : "Exported {count} comments", { count: comments.length }), { kind: "success" });
   }
 
   function pickImportFile() {
@@ -2430,10 +2437,10 @@
       reader.onload = function () {
         var data;
         try { data = JSON.parse(reader.result); }
-        catch (e) { toast("That file isn’t valid JSON", { kind: "error" }); return; }
+        catch (e) { toast(tr("That file isn’t valid JSON"), { kind: "error" }); return; }
         importComments(data);
       };
-      reader.onerror = function () { toast("Couldn’t read that file", { kind: "error" }); };
+      reader.onerror = function () { toast(tr("Couldn’t read that file"), { kind: "error" }); };
       reader.readAsText(f);
     });
     inp.click();
@@ -2454,10 +2461,10 @@
   }
   function importComments(data) {
     var incoming = data && Array.isArray(data.comments) ? data.comments : null;
-    if (!incoming) { toast("No comments found in that file", { kind: "error" }); return; }
+    if (!incoming) { toast(tr("No comments found in that file"), { kind: "error" }); return; }
     // Warn if the export came from a different page
     if (data.page && data.page !== PAGE)
-      toast("These comments were from a different page — positions may not match.", { kind: "info", duration: 6000 });
+      toast(tr("These comments were from a different page — positions may not match."), { kind: "info", duration: 6000 });
     var existing = {};
     state.comments.forEach(function (c) { existing[c.id] = true; });
     var prepared = [];
@@ -2471,20 +2478,20 @@
       if (!Array.isArray(copy.replies)) copy.replies = [];
       prepared.push(copy);
     });
-    if (!prepared.length) { toast("Nothing new to import", { kind: "info" }); return; }
+    if (!prepared.length) { toast(tr("Nothing new to import"), { kind: "info" }); return; }
     var d = dbRead();
     d.comments = d.comments.concat(prepared);
     dbWrite(d);
     load();
-    toast("Imported " + prepared.length + " comment" + (prepared.length === 1 ? "" : "s"), { kind: "success" });
+    toast(tr(prepared.length === 1 ? "Imported {count} comment" : "Imported {count} comments", { count: prepared.length }), { kind: "success" });
   }
 
   function copyLink(id) {
     var link = location.origin + location.pathname + location.search + "#an=" + id;
-    function ok() { toast("Link copied to clipboard", { kind: "success" }); }
+    function ok() { toast(tr("Link copied to clipboard"), { kind: "success" }); }
     if (navigator.clipboard && navigator.clipboard.writeText)
-      navigator.clipboard.writeText(link).then(ok, function () { prompt("Copy link:", link); });
-    else prompt("Copy link:", link);
+      navigator.clipboard.writeText(link).then(ok, function () { prompt(tr("Copy link:"), link); });
+    else prompt(tr("Copy link:"), link);
   }
 
   // delete with undo — remove locally now, persist when the toast expires
@@ -2494,8 +2501,8 @@
     if (state.activeId === c.id) state.activeId = null;
     pendingDeletes[c.id] = c;
     renderAll(); renderPanel();
-    toast("Comment deleted", {
-      kind: "info", action: "Undo", duration: 5000,
+    toast(tr("Comment deleted"), {
+      kind: "info", action: tr("Undo"), duration: 5000,
       onAction: function () {
         delete pendingDeletes[c.id];
         // Re-insert in chronological order so concurrent deletes don't break positions
@@ -2521,7 +2528,7 @@
       noteEl.innerHTML = "";
       noteEl.appendChild(el("span", { html: ICONS.info }).firstChild);
       noteEl.appendChild(el("span", {}, [
-        el("span", { class: "an-nlbl", text: "What to review: " }),
+        el("span", { class: "an-nlbl", text: tr("What to review: ") }),
         document.createTextNode(state.note),
       ]));
       noteEl.classList.add("an-show");
@@ -2537,35 +2544,35 @@
     footEl.innerHTML = "";
     footEl.appendChild(el("div", { class: "an-localnote" }, [
       el("span", { html: ICONS.info }),
-      el("span", { text: canShare
-        ? "Saved in this browser. Download or share to send your comments."
-        : "Saved in this browser. Download to send your comments." }),
+      el("span", { text: CFG.submitReview ? tr("Saved in this browser. Submit review sends the comments on this page.") : canShare
+        ? tr("Saved in this browser. Download or share to send your comments.")
+        : tr("Saved in this browser. Download to send your comments.") }),
     ]));
     footEl.appendChild(el("div", { class: "an-footrow" }, [
-      CFG.submitReview ? el("button", { class: "an-fbtn an-submit", html: ICONS.share + "<span>Submit review</span>", onclick: submitReview }) : null,
-      el("button", { class: "an-fbtn" + (n && !CFG.submitReview ? " an-pulse" : ""), title: "Download comments as JSON", html: ICONS.download + "<span>Download</span>", onclick: exportComments }),
-      canShare ? el("button", { class: "an-fbtn", title: "Send comments to " + state.share, html: ICONS.share + "<span>Share</span>", onclick: shareComments }) : null,
-      el("button", { class: "an-fbtn", html: ICONS.upload + "<span>Import</span>", onclick: pickImportFile }),
+      CFG.submitReview ? el("button", { class: "an-fbtn an-submit", html: ICONS.share + tr("<span>Submit review</span>"), onclick: submitReview }) : null,
+      el("button", { class: "an-fbtn" + (n && !CFG.submitReview ? " an-pulse" : ""), title: tr("Download comments as JSON"), html: ICONS.download + tr("<span>Download</span>"), onclick: exportComments }),
+      canShare ? el("button", { class: "an-fbtn", title: tr("Send comments to ") + state.share, html: ICONS.share + tr("<span>Share</span>"), onclick: shareComments }) : null,
+      el("button", { class: "an-fbtn", html: ICONS.upload + tr("<span>Import</span>"), onclick: pickImportFile }),
     ]));
   }
 
   function submitReview(e) {
     var payload = reviewPayload();
-    if (!payload.comments.length) { toast("Add at least one annotation before submitting", { kind: "info" }); return; }
+    if (!payload.comments.length) { toast(tr("Add at least one annotation before submitting"), { kind: "info" }); return; }
     var button = e && e.currentTarget;
     if (button) button.disabled = true;
     Promise.resolve(CFG.submitReview(payload)).then(function () {
       if (button) button.disabled = false;
     }, function () {
       if (button) button.disabled = false;
-      toast("Review submission failed — your annotations are still saved here", { kind: "error", duration: 7000 });
+      toast(tr("Review submission failed — your annotations are still saved here"), { kind: "error", duration: 7000 });
     });
   }
 
   // Copy text to the clipboard with graceful fallback + toast feedback.
   function copyText(text, okMsg) {
-    function ok() { toast(okMsg || "Copied to clipboard", { kind: "success" }); }
-    function fail() { window.prompt("Copy this:", text); }
+    function ok() { toast(okMsg || tr("Copied to clipboard"), { kind: "success" }); }
+    function fail() { window.prompt(tr("Copy this:"), text); }
     if (navigator.clipboard && navigator.clipboard.writeText)
       navigator.clipboard.writeText(text).then(ok, fail);
     else fail();
@@ -2593,17 +2600,16 @@
   function shareSummary(comments) {
     var visible = comments.slice(0, 50);
     var lines = visible.map(function (c, i) {
-      var who = c.author || "Anonymous";
-      var what = clipText(c.text, 280) || "(no text)";
+      var who = c.author || tr("Anonymous");
+      var what = clipText(c.text, 280) || tr("(no text)");
       return (i + 1) + ". [" + (TYPE_LABEL[c.type] || c.type) + "] " + who + ": " + what;
     }).join("\n");
     if (comments.length > visible.length)
-      lines += "\n… and " + (comments.length - visible.length) + " more comment" + (comments.length - visible.length === 1 ? "" : "s") + " in the JSON file.";
+      lines += tr(comments.length - visible.length === 1 ? "\n… and {count} more comment in the JSON file." : "\n… and {count} more comments in the JSON file.", { count: comments.length - visible.length });
     return {
-      subject: "Review comments — " + (CFG.project || PAGE),
-      body: "Review of " + location.href + "\n\n" + lines +
-        "\n\n(" + comments.length + " comment" + (comments.length === 1 ? "" : "s") +
-        ". The full JSON file keeps positions & replies — attach it.)",
+      subject: tr("Review comments — ") + (CFG.project || PAGE),
+      body: tr("Review of ") + location.href + "\n\n" + lines +
+        tr(comments.length === 1 ? "\n\n({count} comment. The full JSON file keeps positions & replies — attach it.)" : "\n\n({count} comments. The full JSON file keeps positions & replies — attach it.)", { count: comments.length }),
     };
   }
 
@@ -2616,10 +2622,10 @@
   // resolve to a mail client. Walks the reviewer through the exact steps.
   function shareComments() {
     var comments = state.comments.slice();
-    if (!comments.length) { toast("No comments to share yet", { kind: "info" }); return; }
+    if (!comments.length) { toast(tr("No comments to share yet"), { kind: "info" }); return; }
     var dest = (state.share || "").trim();
     if (!dest) {
-      toast("No share destination set by the author — use Download instead", { kind: "info" });
+      toast(tr("No share destination set by the author — use Download instead"), { kind: "info" });
       return;
     }
     if (document.getElementById("__an_sharewrap")) return;
@@ -2638,52 +2644,52 @@
       return el("button", { class: "an-sbtn" + (ghost ? " an-ghost2" : ""), html: icon + "<span>" + esc(label) + "</span>", onclick: onclick });
     }
 
-    var dlButton = btn("Download JSON", ICONS.download, false, function () { exportComments(); });
+    var dlButton = btn(tr("Download JSON"), ICONS.download, false, function () { exportComments(); });
 
     var step2;
     if (isEmail) {
       step2 = step(2, el("span", {}, [
-        document.createTextNode("Email the comments to "),
+        document.createTextNode(tr("Email the comments to ")),
         el("b", { text: dest }),
-        document.createTextNode(". Open your mail app below (or copy the details), then "),
-        el("b", { text: "attach the file from step 1" }),
+        document.createTextNode(tr(". Open your mail app below (or copy the details), then ")),
+        el("b", { text: tr("attach the file from step 1") }),
         document.createTextNode("."),
       ]), [
-        btn("Open email", ICONS.mail, false, function () {
+        btn(tr("Open email"), ICONS.mail, false, function () {
           window.location.href = "mailto:" + encodeURIComponent(dest) +
             "?subject=" + encodeURIComponent(sum.subject) +
             "&body=" + encodeURIComponent(sum.body);
         }),
-        btn("Copy address", ICONS.copy, true, function () { copyText(dest, "Email address copied"); }),
-        btn("Copy summary", ICONS.copy, true, function () { copyText(sum.subject + "\n\n" + sum.body, "Summary copied"); }),
+        btn(tr("Copy address"), ICONS.copy, true, function () { copyText(dest, tr("Email address copied")); }),
+        btn(tr("Copy summary"), ICONS.copy, true, function () { copyText(sum.subject + "\n\n" + sum.body, tr("Summary copied")); }),
       ]);
     } else {
       var channelUrl = safeHttpUrl(dest);
       step2 = step(2, el("span", {}, [
-        document.createTextNode("Post the comments to your channel. Open it below, paste the copied summary, and "),
-        el("b", { text: "attach the file from step 1" }),
+        document.createTextNode(tr("Post the comments to your channel. Open it below, paste the copied summary, and ")),
+        el("b", { text: tr("attach the file from step 1") }),
         document.createTextNode("."),
       ]), [
-        channelUrl ? btn("Open channel", ICONS.share, false, function () { window.open(channelUrl, "_blank", "noopener"); }) : null,
-        channelUrl ? null : btn("Copy destination", ICONS.copy, true, function () { copyText(dest, "Destination copied"); }),
-        btn("Copy summary", ICONS.copy, true, function () { copyText(sum.subject + "\n\n" + sum.body, "Summary copied"); }),
+        channelUrl ? btn(tr("Open channel"), ICONS.share, false, function () { window.open(channelUrl, "_blank", "noopener"); }) : null,
+        channelUrl ? null : btn(tr("Copy destination"), ICONS.copy, true, function () { copyText(dest, tr("Destination copied")); }),
+        btn(tr("Copy summary"), ICONS.copy, true, function () { copyText(sum.subject + "\n\n" + sum.body, tr("Summary copied")); }),
       ]);
     }
 
     var box = el("div", { id: "__an_sharebox" }, [
-      el("h3", { class: "an-st", text: "Share your review" }),
-      el("p", { class: "an-sd", text: "Comments live only in this browser. Send them in two steps — they’re not uploaded anywhere automatically." }),
+      el("h3", { class: "an-st", text: tr("Share your review") }),
+      el("p", { class: "an-sd", text: tr("Comments live only in this browser. Send them in two steps — they’re not uploaded anywhere automatically.") }),
       el("div", { class: "an-sdest" }, [
         el("span", { html: isEmail ? ICONS.mail : ICONS.share }).firstChild,
-        el("span", {}, [el("b", { text: isEmail ? "Email to: " : "Channel: " }), document.createTextNode(dest)]),
+        el("span", {}, [el("b", { text: isEmail ? tr("Email to: ") : tr("Channel: ") }), document.createTextNode(dest)]),
       ]),
       step(1, el("span", {}, [
-        document.createTextNode("Download the comments file "),
+        document.createTextNode(tr("Download the comments file ")),
         el("b", { text: "(annotate-" + fileSlug + "-….json)" }),
         document.createTextNode("."),
       ]), [dlButton]),
       step2,
-      el("button", { class: "an-sclose", text: "Done", onclick: closeShareDialog }),
+      el("button", { class: "an-sclose", text: tr("Done"), onclick: closeShareDialog }),
     ]);
 
     var wrap = el("div", { id: "__an_sharewrap" }, [box]);

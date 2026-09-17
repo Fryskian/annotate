@@ -35,24 +35,24 @@ test('admin proposes text and an image, then submits the review', async ({ page 
   const target = page.locator('#review-heading');
   const box = await target.boundingBox();
   await page.mouse.click(box.x + 5, box.y + 5);
-  await page.getByRole('button', { name: 'Change' }).click();
-  await page.getByRole('textbox', { name: 'Comment', exact: true }).fill('Use the approved headline and campaign image.');
-  await page.getByLabel('Proposed text').fill('Approved homepage headline');
-  await page.getByLabel('Proposed image').setInputFiles(path.join(__dirname, '..', 'logo.png'));
-  await page.getByLabel('Image description').fill('Annotate logo');
-  await page.getByRole('button', { name: 'Save annotation' }).click();
+  await page.getByRole('button', { name: 'Aanpassen' }).click();
+  await page.getByRole('textbox', { name: 'Opmerking', exact: true }).fill('Use the approved headline and campaign image.');
+  await page.getByLabel('Tekstvoorstel').fill('Approved homepage headline');
+  await page.getByLabel('Afbeeldingsvoorstel').setInputFiles(path.join(__dirname, '..', 'logo.png'));
+  await page.getByLabel('Beschrijving van de afbeelding').fill('Annotate logo');
+  await page.getByRole('button', { name: 'Opmerking opslaan' }).click();
 
   await expect.poll(() => page.evaluate(() => window.Annotate.comments().length)).toBe(1);
   await expect(target).toContainText('Approved homepage headline');
   await expect(target.locator('img.an-proposal-image')).toBeVisible();
-  await page.getByRole('button', { name: 'Submit review' }).click();
+  await page.getByRole('button', { name: 'Feedback versturen' }).click();
 
-  const dialog = page.getByRole('dialog', { name: 'Submit review' });
+  const dialog = page.getByRole('dialog', { name: 'Feedback versturen' });
   await expect(dialog).toBeVisible();
-  await page.getByLabel('Overall message').fill('Homepage review is ready for implementation.');
+  await page.getByLabel('Algemeen bericht').fill('Homepage review is ready for implementation.');
   const responsePromise = page.waitForResponse(response => response.url().includes('/wp-json/annotate/v1/reviews'));
-  await dialog.getByRole('button', { name: 'Submit review' }).click();
-  await expect(dialog.getByRole('status')).toContainText(/Review #\d+ saved and email sent\./);
+  await dialog.getByRole('button', { name: 'Feedback versturen' }).click();
+  await expect(dialog.getByRole('status')).toContainText(/Feedback #\d+ is opgeslagen\. De e-mail is geaccepteerd voor verzending\./);
   const result = await (await responsePromise).json();
   expect(result).toMatchObject({ mailSent: true });
 
@@ -81,7 +81,7 @@ test('admin proposes text and an image, then submits the review', async ({ page 
   expect(await mediaResponse.json()).toMatchObject({ id: attachmentId, mime_type: 'image/png' });
 
   const mailpitURL = `http://${new URL(baseURL).hostname}:8025/api/v1/messages`;
-  await expect.poll(async () => JSON.stringify(await (await page.request.get(mailpitURL)).json())).toContain(`Website review #${result.id} submitted`);
+  await expect.poll(async () => JSON.stringify(await (await page.request.get(mailpitURL)).json())).toContain(`Website review #${result.id} ontvangen`);
 });
 
 test('admin welcome tour uses the bundled runtime and submits only in memory', async ({ page }) => {
@@ -110,7 +110,7 @@ test('admin welcome tour uses the bundled runtime and submits only in memory', a
   await guide.getByRole('button', { name: 'Volgende' }).click();
   await page.locator('#__an_foot .an-submit').click();
 
-  await expect(page.locator('#forcys-tour-status')).toHaveText('Testreview ontvangen — er is niets verzonden.');
+  await expect(page.locator('#forcys-tour-status')).toHaveText('Testfeedback ontvangen — er is niets verzonden.');
   expect(await page.evaluate(() => window.__forcysDemoSubmission.comments.length)).toBe(1);
   expect(submissions).toEqual([]);
 });
@@ -127,7 +127,7 @@ test('public staging visitors can submit text-only reviews', async ({ page }) =>
   const help = page.locator('#forcys-tour-help');
   await expect(help).toBeVisible();
   const helpBox = await help.boundingBox();
-  const hideBox = await page.getByRole('button', { name: 'Hide review tools' }).boundingBox();
+  const hideBox = await page.getByRole('button', { name: 'Feedbackgereedschap verbergen' }).boundingBox();
   expect(helpBox.y).toBeGreaterThan(hideBox.y);
   await help.click();
   const welcome = page.getByRole('dialog', { name: 'Welkom bij Forcys Annotate' });
@@ -138,21 +138,21 @@ test('public staging visitors can submit text-only reviews', async ({ page }) =>
   const target = page.locator('#review-heading');
   const box = await target.boundingBox();
   await page.mouse.click(box.x + 5, box.y + 5);
-  await page.getByRole('button', { name: 'Change' }).click();
-  await expect(page.getByLabel('Proposed text')).toBeVisible();
-  await expect(page.getByLabel('Proposed image')).toHaveCount(0);
-  await page.getByRole('textbox', { name: 'Comment', exact: true }).fill('Use the public-review headline.');
-  await page.getByLabel('Proposed text').fill('Public staging headline');
-  await page.getByRole('button', { name: 'Save annotation' }).click();
-  await page.getByRole('button', { name: 'Submit review' }).click();
+  await page.getByRole('button', { name: 'Aanpassen' }).click();
+  await expect(page.getByLabel('Tekstvoorstel')).toBeVisible();
+  await expect(page.getByLabel('Afbeeldingsvoorstel')).toHaveCount(0);
+  await page.getByRole('textbox', { name: 'Opmerking', exact: true }).fill('Use the public-review headline.');
+  await page.getByLabel('Tekstvoorstel').fill('Public staging headline');
+  await page.getByRole('button', { name: 'Opmerking opslaan' }).click();
+  await page.getByRole('button', { name: 'Feedback versturen' }).click();
 
-  const dialog = page.getByRole('dialog', { name: 'Submit review' });
-  await page.getByLabel('Your name').fill('Public Reviewer');
-  await page.getByLabel('Your email').fill('public@example.test');
+  const dialog = page.getByRole('dialog', { name: 'Feedback versturen' });
+  await page.getByLabel('Je naam').fill('Public Reviewer');
+  await page.getByLabel('Je e-mailadres').fill('public@example.test');
   const responsePromise = page.waitForResponse(response => response.url().includes('/wp-json/annotate/v1/reviews'));
-  await dialog.getByRole('button', { name: 'Submit review' }).click();
+  await dialog.getByRole('button', { name: 'Feedback versturen' }).click();
   const response = await responsePromise;
   expect(response.status()).toBe(201);
   expect(await response.json()).toMatchObject({ adminUrl: null, exportUrl: null });
-  await expect(dialog.getByRole('status')).toContainText(/Review #\d+ saved and email sent\./);
+  await expect(dialog.getByRole('status')).toContainText(/Feedback #\d+ is opgeslagen\. De e-mail is geaccepteerd voor verzending\./);
 });

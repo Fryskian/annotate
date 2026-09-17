@@ -5,7 +5,7 @@ test('keeps server submission out of the standalone build by default', async ({ 
   await page.goto('/');
   await page.waitForFunction(() => !!window.Annotate);
   await page.evaluate(() => window.Annotate.open());
-  await expect(page.getByRole('button', { name: 'Submit review' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Feedback versturen' })).toHaveCount(0);
 });
 
 test('standalone mode never applies imported content proposals', async ({ page }) => {
@@ -57,14 +57,14 @@ test('shows the submit form and posts the review with the WordPress nonce', asyn
     });
   });
 
-  const dialog = page.getByRole('dialog', { name: 'Submit review' });
+  const dialog = page.getByRole('dialog', { name: 'Feedback versturen' });
   await expect(dialog).toBeVisible();
-  await expect(page.getByLabel('Your name')).toHaveValue('Jane Reviewer');
-  await expect(page.getByLabel('Your email')).toHaveValue('jane@example.test');
-  await page.getByLabel('Overall message').fill('Homepage review is ready.');
-  await dialog.getByRole('button', { name: 'Submit review' }).click();
+  await expect(page.getByLabel('Je naam')).toHaveValue('Jane Reviewer');
+  await expect(page.getByLabel('Je e-mailadres')).toHaveValue('jane@example.test');
+  await page.getByLabel('Algemeen bericht').fill('Homepage review is ready.');
+  await dialog.getByRole('button', { name: 'Feedback versturen' }).click();
 
-  await expect(dialog.getByRole('status')).toHaveText('Review #17 saved and email sent.');
+  await expect(dialog.getByRole('status')).toHaveText('Feedback #17 is opgeslagen. De e-mail is geaccepteerd voor verzending.');
   const request = await page.evaluate(() => window.__reviewRequest);
   expect(request.url).toBe('https://example.test/wp-json/annotate/v1/reviews');
   expect(request.options.headers['X-WP-Nonce']).toBe('rest-nonce');

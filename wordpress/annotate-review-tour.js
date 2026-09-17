@@ -19,7 +19,7 @@
       submitReview: function (review) {
         window.__forcysDemoSubmission = review;
         var status = document.getElementById("forcys-tour-status");
-        if (status) status.textContent = "Testreview ontvangen — er is niets verzonden.";
+        if (status) status.textContent = "Testfeedback ontvangen — er is niets verzonden.";
         return Promise.resolve({ id: "demo" });
       },
     });
@@ -79,7 +79,7 @@
       { tool: "pin", title: "Plaats een pin", copy: practice ? "Klik op de oefenkaart ‘Nieuwe hero-afbeelding’, schrijf een testopmerking en sla die op." : "Klik ergens op de pagina, schrijf je opmerking en sla die op." },
       { tool: "cursor", title: "Kies een kleur", copy: "Met de kleurknop geef je tekeningen en pins een herkenbare kleur.", selector: "#__an_colorbtn" },
       { tool: "cursor", title: "Voeg snel een sectie-opmerking toe", copy: "Beweeg over een inhoudsblok. Met de plus aan de rand voeg je zonder tekenen een opmerking over de hele sectie toe.", selector: practice ? "[data-review-block]" : false },
-      { title: practice ? "Controleer en dien je testreview in" : "Controleer en dien je review in", copy: practice ? "Open het overzicht en klik op ‘Submit review’. Deze oefenpagina verstuurt niets." : "Open het overzicht, controleer je opmerkingen en klik op ‘Submit review’ wanneer je klaar bent.", selector: "#__an_foot .an-submit" },
+      { title: practice ? "Controleer en dien je testfeedback in" : "Controleer en dien je feedback in", copy: practice ? "Open het overzicht en klik op ‘Feedback versturen’. Deze oefenpagina verstuurt niets." : "Open het overzicht, controleer je opmerkingen en klik op ‘Feedback versturen’ wanneer je klaar bent.", selector: "#__an_foot .an-submit" },
     ];
     var step = 0;
     var target;

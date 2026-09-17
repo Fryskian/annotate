@@ -491,3 +491,9 @@ unavailable (private mode, sandboxed iframes).
 ## License
 
 [MIT](./LICENSE) — free for personal and commercial use.
+
+### Nederlandse WordPress-interface
+
+De WordPress-plugin gebruikt vanaf 1.3.2 standaard Nederlandse knoppen, formulieren, meldingen en beheerlabels. Het bestand `wordpress/annotate-review-nl.js` bevat de interfacevertalingen. Het wordt vóór de WordPress-bridge en de oefenrondleiding geladen; bestaande projectinstellingen blijven behouden.
+
+De zelfstandige `annotate.js`-integratie blijft standaard Engels. Een integratie kan `AnnotateConfig.translations` en `AnnotateConfig.locale` meegeven. Vertalingen worden alleen op vaste interfaceteksten toegepast; opmerkingen, exportvelden en interne waarden zoals `change` blijven ongewijzigd.

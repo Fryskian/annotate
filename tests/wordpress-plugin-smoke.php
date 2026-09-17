@@ -65,4 +65,16 @@ if ( 201 !== $failed_mail_response->get_status() || true === $failed_mail_result
 	throw new RuntimeException( 'A mail failure discarded the saved review.' );
 }
 
+remove_filter( 'pre_wp_mail', '__return_false' );
+$broken_transport = static function () { throw new Error( 'Simulated mail transport failure' ); };
+add_filter( 'pre_wp_mail', $broken_transport );
+$broken_response = rest_do_request( clone $request );
+$broken_result = $broken_response->get_data();
+remove_filter( 'pre_wp_mail', $broken_transport );
+if ( 201 !== $broken_response->get_status() || false !== $broken_result['mailSent']
+	|| 'private' !== get_post_status( $broken_result['id'] )
+	|| 'failed' !== get_post_meta( $broken_result['id'], '_annotate_notification_status', true ) ) {
+	throw new RuntimeException( 'A broken transport lost the saved review or reported success.' );
+}
+
 echo "WordPress plugin smoke test passed.\n";

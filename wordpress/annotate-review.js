@@ -30,7 +30,7 @@
       body: file,
     }).then(function (response) {
       return response.json().then(function (data) {
-        if (!response.ok) throw new Error(data.message || "Image upload failed");
+        if (!response.ok) throw new Error(data.message || "De afbeelding kon niet worden geüpload");
         return {
           id: data.id,
           url: data.source_url,
@@ -48,19 +48,19 @@
       var old = document.getElementById("__an_wp_submit");
       if (old) old.remove();
 
-      var title = node("h2", { id: "__an_wp_submit_title", text: "Submit review" });
+      var title = node("h2", { id: "__an_wp_submit_title", text: "Feedback versturen" });
       var name = node("input", { id: "__an_wp_name", name: "name", required: "", maxlength: "100", value: wp.reviewer && wp.reviewer.name || "" });
       var email = node("input", { id: "__an_wp_email", name: "email", type: "email", required: "", maxlength: "200", value: wp.reviewer && wp.reviewer.email || "" });
       var message = node("textarea", { id: "__an_wp_message", name: "message", rows: "4", maxlength: "2000" });
       var status = node("p", { class: "an-wp-status", role: "status", "aria-live": "polite" });
-      var cancel = node("button", { type: "button", class: "an-wp-cancel", text: "Cancel" });
-      var submit = node("button", { type: "submit", text: "Submit review" });
+      var cancel = node("button", { type: "button", class: "an-wp-cancel", text: "Annuleren" });
+      var submit = node("button", { type: "submit", text: "Feedback versturen" });
       var form = node("form", {}, [
         title,
-        node("p", { class: "an-wp-intro", text: "Send these annotations for implementation review." }),
-        node("label", { for: name.id, text: "Your name" }), name,
-        node("label", { for: email.id, text: "Your email" }), email,
-        node("label", { for: message.id, text: "Overall message" }), message,
+        node("p", { class: "an-wp-intro", text: "Verstuur de opmerkingen van deze pagina naar de websitebeheerder." }),
+        node("label", { for: name.id, text: "Je naam" }), name,
+        node("label", { for: email.id, text: "Je e-mailadres" }), email,
+        node("label", { for: message.id, text: "Algemeen bericht" }), message,
         status,
         node("div", { class: "an-wp-actions" }, [cancel, submit]),
       ]);
@@ -72,7 +72,7 @@
       form.addEventListener("submit", function (event) {
         event.preventDefault();
         submit.disabled = true;
-        status.textContent = "Submitting…";
+        status.textContent = "Bezig met versturen…";
         var headers = { "Content-Type": "application/json" };
         headers[wp.nonceHeader || "X-WP-Nonce"] = wp.nonce;
         fetch(wp.restUrl, {
@@ -86,15 +86,15 @@
           }),
         }).then(function (response) {
           return response.json().then(function (data) {
-            if (!response.ok) throw new Error(data.message || "Submission failed");
-            status.textContent = "Review #" + data.id + " saved" + (data.mailSent ? " and email sent." : ", but the email notification failed.");
+            if (!response.ok) throw new Error(data.message || "Versturen is mislukt");
+            status.textContent = "Feedback #" + data.id + (data.mailSent ? " is opgeslagen. De e-mail is geaccepteerd voor verzending." : " is opgeslagen, maar de e-mail kon niet worden verstuurd.");
             submit.remove();
-            cancel.textContent = "Close";
+            cancel.textContent = "Sluiten";
             resolve(data);
           });
         }).catch(function (error) {
           submit.disabled = false;
-          status.textContent = error.message || "Submission failed. Your annotations are still saved in this browser.";
+          status.textContent = error.message || "Versturen is mislukt. Je opmerkingen staan nog in deze browser.";
           reject(error);
         });
       });
@@ -111,7 +111,7 @@
     submitReview: submitReview,
   });
 
-  var style = node("style", { text: "#__an_wp_submit{width:min(440px,calc(100vw - 24px));max-height:calc(100vh - 32px);padding:0;border:1px solid var(--an-border,#ddd);border-radius:16px;background:var(--an-surface,#fff);color:var(--an-fg,#17171f);box-shadow:0 18px 60px rgba(0,0,0,.3);font:14px Inter,system-ui,sans-serif}#__an_wp_submit::backdrop{background:rgba(10,10,16,.52)}#__an_wp_submit form{padding:22px}#__an_wp_submit h2{margin:0 0 5px;font-size:19px}#__an_wp_submit .an-wp-intro{margin:0 0 18px;color:var(--an-muted,#666)}#__an_wp_submit label{display:block;margin:12px 0 6px;font-weight:700;font-size:12px}#__an_wp_submit input,#__an_wp_submit textarea{box-sizing:border-box;width:100%;padding:10px;border:1px solid var(--an-border-strong,#aaa);border-radius:9px;background:var(--an-surface,#fff);color:inherit;font:inherit}#__an_wp_submit input:focus,#__an_wp_submit textarea:focus{outline:2px solid var(--an-btn-bg,#6d28d9);outline-offset:2px}#__an_wp_submit .an-wp-status{min-height:20px;margin:12px 0 0;color:var(--an-muted,#666)}#__an_wp_submit .an-wp-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}#__an_wp_submit button{min-height:40px;padding:8px 14px;border:0;border-radius:9px;background:var(--an-btn-bg,#6d28d9);color:var(--an-btn-fg,#fff);font-weight:700;cursor:pointer}#__an_wp_submit button:disabled{opacity:.55}#__an_wp_submit .an-wp-cancel{border:1px solid var(--an-border-strong,#aaa);background:transparent;color:inherit}@media(max-width:640px){#__an_wp_submit form{padding:18px}}" });
+  var style = node("style", { text: "#__an_foot .an-footrow{flex-wrap:wrap}#__an_foot .an-fbtn.an-submit{flex-basis:100%}#__an_wp_submit{width:min(440px,calc(100vw - 24px));max-height:calc(100vh - 32px);padding:0;border:1px solid var(--an-border,#ddd);border-radius:16px;background:var(--an-surface,#fff);color:var(--an-fg,#17171f);box-shadow:0 18px 60px rgba(0,0,0,.3);font:14px Inter,system-ui,sans-serif}#__an_wp_submit::backdrop{background:rgba(10,10,16,.52)}#__an_wp_submit form{padding:22px}#__an_wp_submit h2{margin:0 0 5px;font-size:19px}#__an_wp_submit .an-wp-intro{margin:0 0 18px;color:var(--an-muted,#666)}#__an_wp_submit label{display:block;margin:12px 0 6px;font-weight:700;font-size:12px}#__an_wp_submit input,#__an_wp_submit textarea{box-sizing:border-box;width:100%;padding:10px;border:1px solid var(--an-border-strong,#aaa);border-radius:9px;background:var(--an-surface,#fff);color:inherit;font:inherit}#__an_wp_submit input:focus,#__an_wp_submit textarea:focus{outline:2px solid var(--an-btn-bg,#6d28d9);outline-offset:2px}#__an_wp_submit .an-wp-status{min-height:20px;margin:12px 0 0;color:var(--an-muted,#666)}#__an_wp_submit .an-wp-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}#__an_wp_submit button{min-height:40px;padding:8px 14px;border:0;border-radius:9px;background:var(--an-btn-bg,#6d28d9);color:var(--an-btn-fg,#fff);font-weight:700;cursor:pointer}#__an_wp_submit button:disabled{opacity:.55}#__an_wp_submit .an-wp-cancel{border:1px solid var(--an-border-strong,#aaa);background:transparent;color:inherit}@media(max-width:640px){#__an_wp_submit form{padding:18px}}" });
   document.head.appendChild(style);
 
   document.addEventListener("click", function (event) {

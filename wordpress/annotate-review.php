@@ -1,8 +1,8 @@
 <?php
 /**
  * Plugin Name: Annotate Review
- * Description: Collects visual website reviews as portable JSON.
- * Version: 1.3.0
+ * Description: Verzamel opmerkingen op je website en verstuur feedback naar de beheerder.
+ * Version: 1.3.3
  * Author: reviewjs contributors
  * License: MIT
  * License URI: https://opensource.org/license/mit
@@ -10,7 +10,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'ANNOTATE_REVIEW_VERSION', '1.3.0' );
+define( 'ANNOTATE_REVIEW_VERSION', '1.3.3' );
 
 function annotate_review_public_mode() {
 	return 'staging' === wp_get_environment_type() && '1' === (string) get_option( 'annotate_review_public_staging', '0' );
@@ -21,8 +21,8 @@ function annotate_review_register_post_type() {
 		'annotate_review',
 		array(
 			'labels'             => array(
-				'name'          => __( 'Design Reviews', 'annotate-review' ),
-				'singular_name' => __( 'Design Review', 'annotate-review' ),
+				'name'          => __( 'Websitefeedback', 'annotate-review' ),
+				'singular_name' => __( 'Websitefeedback', 'annotate-review' ),
 			),
 			'public'             => false,
 			'publicly_queryable' => false,
@@ -88,8 +88,9 @@ function annotate_review_tour_admin_assets() {
 		return;
 	}
 	$user = wp_get_current_user();
+	annotate_review_enqueue_language();
 	wp_enqueue_style( 'annotate-review-tour', plugins_url( 'annotate-review-tour.css', __FILE__ ), array(), ANNOTATE_REVIEW_VERSION );
-	wp_enqueue_script( 'annotate-review-tour', plugins_url( 'annotate-review-tour.js', __FILE__ ), array(), ANNOTATE_REVIEW_VERSION, false );
+	wp_enqueue_script( 'annotate-review-tour', plugins_url( 'annotate-review-tour.js', __FILE__ ), array( 'annotate-review-nl' ), ANNOTATE_REVIEW_VERSION, false );
 	wp_add_inline_script(
 		'annotate-review-tour',
 		'window.AnnotateReviewTour=' . wp_json_encode( array( 'mode' => 'practice', 'autostart' => true, 'reviewer' => $user->display_name ) ) . ';',
@@ -105,6 +106,10 @@ function annotate_review_tour_admin_assets() {
 }
 add_action( 'admin_enqueue_scripts', 'annotate_review_tour_admin_assets' );
 
+function annotate_review_enqueue_language() {
+	wp_enqueue_script( 'annotate-review-nl', plugins_url( 'annotate-review-nl.js', __FILE__ ), array(), ANNOTATE_REVIEW_VERSION, false );
+}
+
 function annotate_review_enqueue() {
 	$authorized = current_user_can( 'edit_pages' );
 	$public     = annotate_review_public_mode();
@@ -112,10 +117,11 @@ function annotate_review_enqueue() {
 		return;
 	}
 	$user = wp_get_current_user();
+	annotate_review_enqueue_language();
 	wp_enqueue_script(
 		'annotate-review-bridge',
 		plugins_url( 'annotate-review.js', __FILE__ ),
-		array(),
+		array( 'annotate-review-nl' ),
 		ANNOTATE_REVIEW_VERSION,
 		true
 	);
@@ -137,7 +143,7 @@ function annotate_review_enqueue() {
 	);
 	wp_add_inline_script(
 		'annotate-review-bridge',
-		'window.AnnotateConfig = {project:' . wp_json_encode( sanitize_title( get_bloginfo( 'name' ) ) ) . '};',
+		'window.AnnotateConfig = Object.assign({}, window.AnnotateConfig || {}, {project:' . wp_json_encode( sanitize_title( get_bloginfo( 'name' ) ) ) . '});',
 		'before'
 	);
 	wp_enqueue_script(
@@ -168,7 +174,7 @@ function annotate_review_admin_bar( WP_Admin_Bar $bar ) {
 	$bar->add_node(
 		array(
 			'id'    => 'annotate-review',
-			'title' => __( 'Annotate page', 'annotate-review' ),
+			'title' => __( 'Feedback op deze pagina', 'annotate-review' ),
 			'href'  => '#',
 		)
 	);
@@ -189,7 +195,7 @@ function annotate_review_public_rate_limit() {
 	$ip_count   = (int) get_transient( $ip_key );
 	$site_count = (int) get_transient( $site_key );
 	if ( $ip_count >= 5 || $site_count >= 50 ) {
-		return new WP_Error( 'annotate_rate_limited', __( 'Too many reviews were submitted. Please try again later.', 'annotate-review' ), array( 'status' => 429 ) );
+		return new WP_Error( 'annotate_rate_limited', __( 'Er is te vaak feedback verstuurd. Probeer het later opnieuw.', 'annotate-review' ), array( 'status' => 429 ) );
 	}
 	set_transient( $ip_key, $ip_count + 1, HOUR_IN_SECONDS );
 	set_transient( $site_key, $site_count + 1, HOUR_IN_SECONDS );
@@ -207,13 +213,13 @@ function annotate_review_submit( WP_REST_Request $request ) {
 	$message  = sanitize_textarea_field( $params['message'] ?? '' );
 
 	if ( ! $review || empty( $review['comments'] ) || ! is_array( $review['comments'] ) ) {
-		return new WP_Error( 'annotate_empty_review', __( 'Add at least one annotation before submitting.', 'annotate-review' ), array( 'status' => 400 ) );
+		return new WP_Error( 'annotate_empty_review', __( 'Voeg eerst minstens één opmerking toe.', 'annotate-review' ), array( 'status' => 400 ) );
 	}
 	if ( count( $review['comments'] ) > 500 || strlen( wp_json_encode( $review ) ) > 1024 * 1024 ) {
-		return new WP_Error( 'annotate_review_too_large', __( 'This review is too large to submit.', 'annotate-review' ), array( 'status' => 413 ) );
+		return new WP_Error( 'annotate_review_too_large', __( 'Deze feedback is te groot om te versturen.', 'annotate-review' ), array( 'status' => 413 ) );
 	}
 	if ( ! $name || ! is_email( $email ) ) {
-		return new WP_Error( 'annotate_invalid_reviewer', __( 'Enter a name and valid email address.', 'annotate-review' ), array( 'status' => 400 ) );
+		return new WP_Error( 'annotate_invalid_reviewer', __( 'Vul je naam en een geldig e-mailadres in.', 'annotate-review' ), array( 'status' => 400 ) );
 	}
 
 	$url      = esc_url_raw( $review['url'] ?? '' );
@@ -221,18 +227,18 @@ function annotate_review_submit( WP_REST_Request $request ) {
 	$url_host = wp_parse_url( $url, PHP_URL_HOST );
 	$our_host = wp_parse_url( home_url(), PHP_URL_HOST );
 	if ( ! in_array( $scheme, array( 'http', 'https' ), true ) || ! $url_host || strtolower( $url_host ) !== strtolower( $our_host ) ) {
-		return new WP_Error( 'annotate_invalid_url', __( 'The reviewed page must belong to this site.', 'annotate-review' ), array( 'status' => 400 ) );
+		return new WP_Error( 'annotate_invalid_url', __( 'De pagina moet bij deze website horen.', 'annotate-review' ), array( 'status' => 400 ) );
 	}
 
 	$counts = array( 'keep' => 0, 'change' => 0, 'question' => 0 );
 	foreach ( $review['comments'] as $index => $comment ) {
 		if ( ! is_array( $comment ) ) {
-			return new WP_Error( 'annotate_invalid_comment', __( 'The review contains an invalid annotation.', 'annotate-review' ), array( 'status' => 400 ) );
+			return new WP_Error( 'annotate_invalid_comment', __( 'De feedback bevat een ongeldige opmerking.', 'annotate-review' ), array( 'status' => 400 ) );
 		}
 		if ( 'element' === ( $comment['type'] ?? '' ) ) {
 			$verdict = $comment['verdict'] ?? '';
 			if ( ! isset( $counts[ $verdict ] ) || ! trim( (string) ( $comment['text'] ?? '' ) ) ) {
-				return new WP_Error( 'annotate_invalid_element_comment', __( 'Every element annotation needs a verdict and comment.', 'annotate-review' ), array( 'status' => 400 ) );
+				return new WP_Error( 'annotate_invalid_element_comment', __( 'Geef bij elk aangewezen onderdeel een beoordeling en een opmerking.', 'annotate-review' ), array( 'status' => 400 ) );
 			}
 			++$counts[ $verdict ];
 		}
@@ -240,14 +246,14 @@ function annotate_review_submit( WP_REST_Request $request ) {
 		$has_image     = isset( $comment['proposal']['image'] );
 		$attachment_id = absint( $comment['proposal']['image']['attachment']['id'] ?? 0 );
 		if ( $has_image && annotate_review_public_mode() ) {
-			return new WP_Error( 'annotate_public_images_disabled', __( 'Image proposals are disabled for public staging reviews.', 'annotate-review' ), array( 'status' => 400 ) );
+			return new WP_Error( 'annotate_public_images_disabled', __( 'Afbeeldingen uploaden is niet beschikbaar voor bezoekers van de testsite.', 'annotate-review' ), array( 'status' => 400 ) );
 		}
 		if ( $has_image && ! $attachment_id ) {
-			return new WP_Error( 'annotate_invalid_attachment', __( 'The review contains an unavailable image.', 'annotate-review' ), array( 'status' => 400 ) );
+			return new WP_Error( 'annotate_invalid_attachment', __( 'De feedback bevat een afbeelding die niet beschikbaar is.', 'annotate-review' ), array( 'status' => 400 ) );
 		}
 		if ( $attachment_id ) {
 			if ( ! wp_attachment_is_image( $attachment_id ) || ! current_user_can( 'edit_post', $attachment_id ) ) {
-				return new WP_Error( 'annotate_invalid_attachment', __( 'The review contains an unavailable image.', 'annotate-review' ), array( 'status' => 400 ) );
+				return new WP_Error( 'annotate_invalid_attachment', __( 'De feedback bevat een afbeelding die niet beschikbaar is.', 'annotate-review' ), array( 'status' => 400 ) );
 			}
 			$metadata = wp_get_attachment_metadata( $attachment_id );
 			$file     = get_attached_file( $attachment_id );
@@ -274,7 +280,7 @@ function annotate_review_submit( WP_REST_Request $request ) {
 			'post_type'    => 'annotate_review',
 			'post_status'  => 'private',
 			'post_author'  => get_current_user_id(),
-			'post_title'   => sprintf( __( 'Review of %s', 'annotate-review' ), $path ),
+			'post_title'   => sprintf( __( 'Feedback op %s', 'annotate-review' ), $path ),
 		),
 		true
 	);
@@ -297,7 +303,7 @@ function annotate_review_submit( WP_REST_Request $request ) {
 	$json = wp_json_encode( $review, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES );
 	if ( false === $json || false === update_post_meta( $post_id, '_annotate_review_json', wp_slash( $json ) ) ) {
 		wp_delete_post( $post_id, true );
-		return new WP_Error( 'annotate_storage_failed', __( 'The review could not be stored.', 'annotate-review' ), array( 'status' => 500 ) );
+		return new WP_Error( 'annotate_storage_failed', __( 'De feedback kon niet worden opgeslagen.', 'annotate-review' ), array( 'status' => 500 ) );
 	}
 	update_post_meta( $post_id, '_annotate_url', $url );
 	update_post_meta( $post_id, '_annotate_counts', $counts );
@@ -310,22 +316,28 @@ function annotate_review_submit( WP_REST_Request $request ) {
 	);
 	$recipient = sanitize_email( get_option( 'annotate_review_recipient', get_option( 'admin_email' ) ) );
 	$recipient = $recipient ?: sanitize_email( get_option( 'admin_email' ) );
-	$subject   = sprintf( __( 'Website review #%d submitted', 'annotate-review' ), $post_id );
+	$subject   = sprintf( __( 'Website review #%d ontvangen', 'annotate-review' ), $post_id );
 	$sender    = $submitted_by
-		? sprintf( __( '%1$s <%2$s> submitted a website review.', 'annotate-review' ), $submitter->display_name, $submitter->user_email )
-		: sprintf( __( '%1$s <%2$s> submitted a public staging review.', 'annotate-review' ), $name, $email );
+		? sprintf( __( '%1$s <%2$s> heeft feedback op de website verstuurd.', 'annotate-review' ), $submitter->display_name, $submitter->user_email )
+		: sprintf( __( '%1$s <%2$s> heeft feedback via de testsite verstuurd.', 'annotate-review' ), $name, $email );
 	$body      = implode(
 		"\n",
 		array(
 			$sender,
-			sprintf( __( 'Review contact: %1$s <%2$s>', 'annotate-review' ), $name, $email ),
+			sprintf( __( 'Contactpersoon: %1$s <%2$s>', 'annotate-review' ), $name, $email ),
 			$url,
 			$message,
-			sprintf( __( 'Keep: %1$d | Change: %2$d | Questions: %3$d', 'annotate-review' ), $counts['keep'], $counts['change'], $counts['question'] ),
+			sprintf( __( 'Behouden: %1$d | Aanpassen: %2$d | Vragen: %3$d', 'annotate-review' ), $counts['keep'], $counts['change'], $counts['question'] ),
 			$edit_url,
 		)
 	);
-	$mail_sent = (bool) wp_mail( $recipient, $subject, $body );
+	try {
+		$mail_sent = (bool) wp_mail( $recipient, $subject, $body );
+	} catch ( \Throwable $error ) {
+		// The review is already stored. A broken mail transport must not invite resubmission.
+		$mail_sent = false;
+	}
+	update_post_meta( $post_id, '_annotate_notification_status', $mail_sent ? 'accepted' : 'failed' );
 
 	return new WP_REST_Response(
 		array(
@@ -355,7 +367,7 @@ function annotate_review_export() {
 	$post_id = absint( $_GET['review'] ?? 0 );
 	$post    = get_post( $post_id );
 	if ( ! $post || 'annotate_review' !== $post->post_type || ! current_user_can( 'edit_post', $post_id ) ) {
-		wp_die( esc_html__( 'You cannot export this review.', 'annotate-review' ), '', array( 'response' => 403 ) );
+		wp_die( esc_html__( 'Je kunt deze feedback niet downloaden.', 'annotate-review' ), '', array( 'response' => 403 ) );
 	}
 	check_admin_referer( 'annotate_review_export_' . $post_id );
 	nocache_headers();
@@ -379,7 +391,7 @@ function annotate_review_settings() {
 	);
 	add_settings_field(
 		'annotate_review_recipient',
-		__( 'Website review recipient', 'annotate-review' ),
+		__( 'Ontvanger van websitefeedback', 'annotate-review' ),
 		'annotate_review_recipient_field',
 		'general'
 	);
@@ -394,7 +406,7 @@ function annotate_review_settings() {
 	);
 	add_settings_field(
 		'annotate_review_public_staging',
-		__( 'Public staging reviews', 'annotate-review' ),
+		__( 'Feedback van bezoekers op de testsite', 'annotate-review' ),
 		'annotate_review_public_staging_field',
 		'general'
 	);
@@ -406,7 +418,7 @@ function annotate_review_recipient_field() {
 	printf(
 		'<input class="regular-text" type="email" name="annotate_review_recipient" value="%s" required><p class="description">%s</p>',
 		esc_attr( $value ),
-		esc_html__( 'Receives a link and summary when an authorized reviewer submits annotations.', 'annotate-review' )
+		esc_html__( 'Ontvangt een link en samenvatting wanneer iemand feedback verstuurt.', 'annotate-review' )
 	);
 }
 
@@ -420,17 +432,17 @@ function annotate_review_public_staging_field() {
 		'<label><input type="checkbox" name="annotate_review_public_staging" value="1" %s %s> %s</label><p class="description">%s</p>',
 		checked( get_option( 'annotate_review_public_staging', '0' ), '1', false ),
 		disabled( $staging, false, false ),
-		esc_html__( 'Let visitors annotate and submit reviews', 'annotate-review' ),
+		esc_html__( 'Laat bezoekers opmerkingen plaatsen en feedback versturen', 'annotate-review' ),
 		esc_html( $staging
-			? __( 'Image uploads are disabled. Public submissions are rate-limited and stored privately.', 'annotate-review' )
-			: __( 'Available only when WP_ENVIRONMENT_TYPE is staging.', 'annotate-review' ) )
+			? __( 'Afbeeldingen uploaden is uitgeschakeld. Er geldt een limiet voor het versturen van feedback. Ingediende feedback is niet openbaar.', 'annotate-review' )
+			: __( 'Alleen beschikbaar wanneer WP_ENVIRONMENT_TYPE op staging staat.', 'annotate-review' ) )
 	);
 }
 
 function annotate_review_add_meta_box() {
 	add_meta_box(
 		'annotate-review-summary',
-		__( 'Submitted review', 'annotate-review' ),
+		__( 'Ingediende feedback', 'annotate-review' ),
 		'annotate_review_meta_box',
 		'annotate_review',
 		'normal',
@@ -449,13 +461,13 @@ function annotate_review_meta_box( WP_Post $post ) {
 		admin_url( 'admin-post.php?action=annotate_review_export&review=' . $post->ID ),
 		'annotate_review_export_' . $post->ID
 	);
-	echo '<p><strong>' . esc_html__( 'Page:', 'annotate-review' ) . '</strong> <a href="' . esc_url( $url ) . '">' . esc_html( $url ) . '</a></p>';
-	echo '<p><strong>' . esc_html__( 'Reviewer:', 'annotate-review' ) . '</strong> ' . esc_html( $submission['reviewer']['name'] ?? '' ) . ' &lt;' . esc_html( $submission['reviewer']['email'] ?? '' ) . '&gt;</p>';
-	echo '<p><strong>' . esc_html__( 'Decisions:', 'annotate-review' ) . '</strong> ' . esc_html( sprintf( 'Keep %d · Change %d · Questions %d', $counts['keep'] ?? 0, $counts['change'] ?? 0, $counts['question'] ?? 0 ) ) . '</p>';
+	echo '<p><strong>' . esc_html__( 'Pagina:', 'annotate-review' ) . '</strong> <a href="' . esc_url( $url ) . '">' . esc_html( $url ) . '</a></p>';
+	echo '<p><strong>' . esc_html__( 'Van:', 'annotate-review' ) . '</strong> ' . esc_html( $submission['reviewer']['name'] ?? '' ) . ' &lt;' . esc_html( $submission['reviewer']['email'] ?? '' ) . '&gt;</p>';
+	echo '<p><strong>' . esc_html__( 'Beoordelingen:', 'annotate-review' ) . '</strong> ' . esc_html( sprintf( 'Behouden %d · Aanpassen %d · Vragen %d', $counts['keep'] ?? 0, $counts['change'] ?? 0, $counts['question'] ?? 0 ) ) . '</p>';
 	if ( $message ) {
-		echo '<p><strong>' . esc_html__( 'Message:', 'annotate-review' ) . '</strong><br>' . nl2br( esc_html( $message ) ) . '</p>';
+		echo '<p><strong>' . esc_html__( 'Bericht:', 'annotate-review' ) . '</strong><br>' . nl2br( esc_html( $message ) ) . '</p>';
 	}
-	echo '<p><a class="button button-primary" href="' . esc_url( $export_url ) . '">' . esc_html__( 'Download review JSON', 'annotate-review' ) . '</a></p>';
+	echo '<p><a class="button button-primary" href="' . esc_url( $export_url ) . '">' . esc_html__( 'Feedback downloaden (JSON)', 'annotate-review' ) . '</a></p>';
 }
 
 function annotate_review_disable_block_editor( $use_block_editor, $post_type ) {
