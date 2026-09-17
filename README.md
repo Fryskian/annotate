@@ -36,16 +36,137 @@ That single line is the whole installation.
 
 | Tool | What it does |
 |------|--------------|
+| ⌖ **Inspect element** | Hover the DOM, choose the intended ancestor, and save a Keep, Change, or Question decision |
 | ✏️ **Highlight** | Select any text to highlight and comment on it |
 | ▭ **Rectangle** | Draw a box around any region |
 | ◯ **Circle** | Circle anything that needs attention |
 | 📍 **Pin** | Drop a point marker anywhere |
-| 〰️ **Freehand** | Sketch directly on the page |
+| 〰️ **Freehand** | Sketch directly on the page; hold Ctrl/⌘ when releasing to add another stroke |
 | ➕ **Section note** | Hover any paragraph/heading for a margin comment button |
 
 Plus: threaded replies, resolve/reopen, search & filter, deep-links to a single
 comment (`#an=<id>`), an "off" mode that collapses to a small launcher, and a
 **Download / Import** round-trip for sharing.
+
+## Chrome / Edge extension
+
+This fork keeps the root `annotate.js` standalone build and adds an on-demand
+Manifest V3 extension. It remains local-only: no remote scripts, accounts,
+telemetry, backend, or host permissions.
+
+```bash
+node scripts/build-extension.mjs
+```
+
+Then open `chrome://extensions` or `edge://extensions`, enable **Developer
+mode**, choose **Load unpacked**, and select `dist/extension/`. Pin the
+extension and click its toolbar icon on a normal `http://` or `https://` page.
+For local `file://` mockups, enable **Allow access to file URLs** in the
+extension details first.
+
+Browser internal pages (`chrome://`, `edge://`), browser stores, and other
+restricted pages do not allow script injection. Annotate.js shows a red `!`
+badge and a useful toolbar title when injection is unavailable.
+
+The extension bundles the current root `annotate.js` during the build. The
+standalone script, local-storage behavior, portable JSON import/export, MIT
+license, and original reviewjs/annotate attribution remain intact.
+
+---
+
+## WordPress plugin
+
+By default, the optional WordPress adapter loads the same local `annotate.js`
+only for signed-in users who can `edit_pages`. It adds **Annotate page** to the
+front-end admin bar, supports proposed text and Media Library images, stores
+submitted reviews as private **Design Reviews**, emails a summary, and provides
+a secure JSON download for Codex.
+
+```bash
+node scripts/build-wordpress.mjs
+```
+
+Copy `dist/wordpress/annotate-review/` to
+`wp-content/plugins/annotate-review/`, then activate **Annotate Review** in
+WordPress. Set the notification address under **Settings → General → Website
+review recipient**.
+
+Reviewers can then:
+
+1. Open a front-end page and choose **Annotate page** in the admin bar.
+2. Inspect an element and choose Keep, Change, or Question.
+3. For Change decisions, propose replacement text and optionally upload an
+   image with an accessible description.
+4. Choose **Submit review**, add an overall message, and submit.
+5. Download the portable JSON from **Design Reviews** in wp-admin.
+
+Editors can learn the workflow under **Design Reviews → Rondleiding**. That
+practice page uses the bundled Annotate runtime, but its test submission stays
+in the browser and creates no review, email, upload, or network request. On a
+staging frontend, the `?` button at the bottom of the Annotate toolbar opens
+the same Dutch guide on the real page; submissions there keep their normal
+WordPress behavior.
+
+Annotations remain in the reviewer's local storage until submitted. Submission
+uses WordPress cookie authentication, a REST nonce, native capabilities,
+`wp_mail()`, the Media Library, and a private custom post type—no external
+service or custom database table. WordPress Media Library files are public by
+URL by default; do not upload confidential review assets without adding a
+protected-media solution. Image proposals upload immediately so they survive a
+refresh; abandoning a draft can therefore leave an unattached Media Library
+item that an administrator may remove during normal media cleanup.
+
+### Public staging reviews
+
+To let anyone review a staging site without a WordPress account, define the
+environment in `wp-config.php`:
+
+```php
+define( 'WP_ENVIRONMENT_TYPE', 'staging' );
+```
+
+Then enable **Public staging reviews** under **Settings → General**. This mode
+cannot activate on local, development, or production environments, even if its
+database option is copied there. Public reviews are stored privately and can
+send the normal notification email, but image proposals and Media Library
+uploads are disabled. The submission endpoint limits anonymous traffic to five
+reviews per IP address and 50 reviews per site per hour.
+
+For the optional DDEV browser check, install the built plugin in a WordPress
+fixture and run:
+
+```bash
+WP_BASE_URL=https://annotate-wp-test.ddev.site npx playwright test tests/wordpress-ddev.spec.js --project=chromium
+```
+
+Add `WP_PUBLIC_MODE=1` to that command when the fixture is configured for the
+public staging mode.
+
+Proposed edits extend ordinary element comments without breaking older imports:
+
+```json
+{
+  "type": "element",
+  "verdict": "change",
+  "scope": {
+    "kind": "similar",
+    "selector": "article.story-row",
+    "matchCount": 6
+  },
+  "proposal": {
+    "text": { "before": "Old heading", "after": "Approved heading" },
+    "image": {
+      "action": "add",
+      "alt": "Support team working together",
+      "attachment": { "id": 42, "url": "https://example.com/uploads/team.jpg", "mime": "image/jpeg" }
+    }
+  }
+}
+```
+
+The browser previews proposals but never edits WordPress posts, blocks, themes,
+or templates directly. The exported JSON is the implementation request for
+Codex or a human developer.
 
 ---
 
@@ -319,6 +440,11 @@ Annotate.version;             // "1.0.1"
   "color": "#f59e0b",
   "anchor": { "exact": "…", "prefix": "…", "suffix": "…" },
   "geom": null,
+  "context": {
+    "url": "https://example.com/pricing?variant=annual",
+    "viewport": { "width": 1440, "height": 1000, "dpr": 2 },
+    "scroll": { "x": 0, "y": 640 }
+  },
   "resolved": false,
   "replies": [],
   "createdAt": "2026-06-16T10:00:00.000Z",
@@ -337,6 +463,7 @@ Annotate.version;             // "1.0.1"
 | `R` | Rectangle | `O` | Show / hide tools |
 | `C` | Circle | `Esc` | Cancel |
 | `D` | Freehand | `?` | Shortcuts card |
+| `Ctrl/⌘ + release` | Add a freehand stroke | `Ctrl/⌘ + Enter` | Comment / submit |
 
 ---
 
@@ -364,3 +491,9 @@ unavailable (private mode, sandboxed iframes).
 ## License
 
 [MIT](./LICENSE) — free for personal and commercial use.
+
+### Nederlandse WordPress-interface
+
+De WordPress-plugin gebruikt vanaf 1.3.2 standaard Nederlandse knoppen, formulieren, meldingen en beheerlabels. Het bestand `wordpress/annotate-review-nl.js` bevat de interfacevertalingen. Het wordt vóór de WordPress-bridge en de oefenrondleiding geladen; bestaande projectinstellingen blijven behouden.
+
+De zelfstandige `annotate.js`-integratie blijft standaard Engels. Een integratie kan `AnnotateConfig.translations` en `AnnotateConfig.locale` meegeven. Vertalingen worden alleen op vaste interfaceteksten toegepast; opmerkingen, exportvelden en interne waarden zoals `change` blijven ongewijzigd.

@@ -47,8 +47,8 @@ async function expectPanelInViewport(page) {
   });
 }
 
-async function dispatchPointerStroke(page, startX, startY, endX, endY, steps = 18) {
-  await page.evaluate(({ startX, startY, endX, endY, steps }) => {
+async function dispatchPointerStroke(page, startX, startY, endX, endY, steps = 18, modifiers = {}) {
+  await page.evaluate(({ startX, startY, endX, endY, steps, modifiers }) => {
     const EventCtor = window.PointerEvent || window.MouseEvent;
     const target = document.elementFromPoint(startX, startY) || document.body;
     function fire(type, x, y, buttons) {
@@ -62,6 +62,8 @@ async function dispatchPointerStroke(page, startX, startY, endX, endY, steps = 1
         buttons,
         clientX: x,
         clientY: y,
+        ctrlKey: !!modifiers.ctrlKey,
+        metaKey: !!modifiers.metaKey,
       }));
     }
     fire('pointerdown', startX, startY, 1);
@@ -74,7 +76,7 @@ async function dispatchPointerStroke(page, startX, startY, endX, endY, steps = 1
       );
     }
     fire('pointerup', endX, endY, 0);
-  }, { startX, startY, endX, endY, steps });
+  }, { startX, startY, endX, endY, steps, modifiers });
 }
 
 test.beforeEach(async ({ page }) => {
@@ -219,6 +221,25 @@ test.describe('Comments panel', () => {
 // PIN TOOL
 // ============================================================
 test.describe('Pin tool', () => {
+  test('stores viewport, URL and scroll context when the annotation is made', async ({ page }) => {
+    await page.evaluate(() => {
+      history.replaceState(null, '', '/?variant=compact');
+      window.scrollTo(0, 120);
+    });
+    const viewport = await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
+    await page.keyboard.press('p');
+    await page.mouse.click(100, 180);
+    await page.locator('#__an_compose textarea').fill('Viewport-specific note');
+    await page.locator('#__an_compose .an-primary').click();
+
+    const comment = await page.evaluate(() => window.Annotate.comments()[0]);
+    expect(comment.context).toMatchObject({
+      url: expect.stringContaining('?variant=compact'),
+      viewport: { ...viewport, dpr: expect.any(Number) },
+      scroll: { x: 0, y: expect.any(Number) },
+    });
+  });
+
   test('creates a pin comment via click', async ({ page }) => {
     await page.keyboard.press('p');
     await expect(page.locator('[data-tool="pin"]')).toHaveClass(/an-on/);
@@ -318,6 +339,44 @@ test.describe('Rectangle drawing', () => {
 // FREEHAND PEN
 // ============================================================
 test.describe('Freehand pen', () => {
+  test('groups Ctrl-held strokes and opens then submits the comment with Ctrl+Enter', async ({ page }) => {
+    await page.keyboard.press('d');
+    const hero = page.locator('header.hero');
+    const box = await hero.boundingBox();
+    const x = box.x + box.width / 2 - 160;
+    const y = box.y + 330;
+
+    await dispatchPointerStroke(page, x, y, x + 100, y + 25, 18, { ctrlKey: true });
+    await expect(page.locator('#__an_compose.an-show')).toHaveCount(0);
+    await dispatchPointerStroke(page, x + 20, y + 55, x + 130, y + 80, 18, { ctrlKey: true });
+    await page.keyboard.press('Control+Enter');
+    await expect(page.locator('#__an_compose')).toHaveClass(/an-show/);
+    await page.locator('#__an_compose textarea').fill('Two-stroke sketch');
+    await page.keyboard.press('Control+Enter');
+
+    await expect.poll(() => page.evaluate(() => window.Annotate.comments().length)).toBe(1);
+    const geom = await page.evaluate(() => window.Annotate.comments()[0].geom);
+    expect(geom.breaks).toHaveLength(1);
+    expect(geom.breaks[0]).toBeGreaterThan(0);
+    const pathData = await page.locator('#__an_overlay path').getAttribute('d');
+    expect((pathData.match(/M/g) || [])).toHaveLength(2);
+  });
+
+  test('Escape cancels a paused multi-stroke sketch', async ({ page }) => {
+    await page.keyboard.press('d');
+    await expect(page.locator('[data-tool="pen"]')).toHaveClass(/an-on/);
+    const box = await page.locator('header.hero').boundingBox();
+    const x = box.x + box.width / 2 - 80;
+    const y = box.y + Math.min(200, box.height / 2);
+    await dispatchPointerStroke(page, x, y, x + 120, y + 40, 18, { ctrlKey: true });
+    await expect(page.locator('#__an_overlay path')).toHaveCount(1);
+
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#__an_overlay path')).toHaveCount(0);
+    await expect(page.locator('[data-tool="cursor"]')).toHaveClass(/an-on/);
+    expect(await page.evaluate(() => window.Annotate.comments().length)).toBe(0);
+  });
+
   test('drawing a stroke creates a pen annotation', async ({ page }) => {
     await page.keyboard.press('d');
     await expect(page.locator('[data-tool="pen"]')).toHaveClass(/an-on/);
